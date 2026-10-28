@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    {% load static cache_busting %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{{ nombre_sistema }}{% endblock %}</title>
+    <script>
+        (function () {
+            var tema = localStorage.getItem('theme') || 'auto';
+            document.documentElement.dataset.theme = tema;
+        })();
+    </script>
+    <link rel="stylesheet" href="{% static_v 'monitoreo/tablero.css' %}">
+</head>
+<body>
+    <nav>
+        <div class="box">
+            <span class="sesion-usuario">
+                <svg viewBox="0 0 48 48" aria-hidden="true"><use href="#icon-usuario-nuevo" xlink:href="#icon-usuario-nuevo"></use></svg>
+                {{ user.username }}
+            </span>
+
+            <div class="nav-acciones">
+                <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="sr-only" aria-hidden="true">
+                    <symbol viewBox="0 0 24 24" id="icon-auto"><path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2V4a8 8 0 1 0 0 16z"/></symbol>
+                    <symbol viewBox="0 0 24 24" id="icon-moon"><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol>
+                    <symbol viewBox="0 0 24 24" id="icon-sun"><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol>
+                    <symbol viewBox="0 0 48 48" id="icon-campana">
+                        <path style="fill:currentColor;stroke:currentColor;stroke-width:0.763465;stroke-miterlimit:5" d="m 37.056695,28.226779 0.79614,2.301568 c 0,0 0.434258,0.882992 0.607961,1.085646 0.173703,0.202654 0.579011,0.52111 0.579011,0.52111 h -0.839566 l -2.069964,0.01447 -27.7925207,-0.01447 0.3908324,-0.303981 0.7382388,-1.085645 0.5934865,-1.823885 0.347406,-1.577804 0.535585,-2.489747 0.405308,-2.084439 0.680338,-2.808203 0.260554,-1.085645 c 0,0 0.21713,-0.607961 0.303981,-0.767189 0.08685,-0.159228 0.405308,-0.665863 0.405308,-0.665863 0,0 0.52111,-0.781665 0.593486,-0.868516 0.07238,-0.08685 0.810615,-0.868517 1.042219,-1.07117 0.231605,-0.202654 1.794934,-1.07117 1.794934,-1.07117 l 0.347407,-0.159228 1.679131,-0.550061 3.155609,-0.506634 0.149226,-0.0069 -0.01535,-1.954993 c 0,0 -1.615007,-0.210982 -2.00723,-0.443001 C 19.346,10.57898 19.069786,10.363534 19.014543,10.214378 18.959301,10.065223 18.848815,9.5238445 18.848815,9.5238445 l -0.01105,-0.6131942 0.02762,-0.1878252 c 0,0 0.02762,-0.07734 0.209922,-0.1160098 0.182301,-0.03867 0.845214,-0.143631 0.845214,-0.143631 L 20.460937,8.3984375 21.554687,8.234375 22.695312,8.203125 24.5,8.171875 c 0,0 0.648437,0.03125 1.109375,0.0625 0.460937,0.03125 1.382812,0.1484375 1.382812,0.1484375 0,0 1.148438,0.1171875 1.273438,0.171875 0.125,0.054687 0.28125,0.1171875 0.28125,0.3125 0,0.1953125 0.01563,0.71875 -0.07813,0.9296875 -0.09375,0.210937 -0.3125,0.71875 -0.3125,0.71875 l -0.515625,0.242187 c 0,0 0.359375,-0.117187 0,0 -0.35937,0.117188 -0.960933,0.273438 -0.960933,0.273438 l -0.757812,0.109375 -0.375,0.03906 0.03516,1.972657 c 0,0 0.65826,0.06171 1.089153,0.128005 0.430893,0.06629 0.939126,0.143631 1.325825,0.209923 0.386699,0.06629 2.485922,0.651864 2.872621,0.850737 0.386699,0.198874 1.635185,0.983321 1.635185,0.983321 0,0 1.082757,1.027514 1.292679,1.281631 0.209923,0.254116 0.817593,1.149048 0.817593,1.149048 0,0 0.464038,0.740253 0.541378,1.115903 0.07734,0.375651 0.585573,2.375437 0.585573,2.375437 l 0.198874,1.303728 z" />
+                        <path style="fill:currentColor;stroke:currentColor;stroke-width:0.763465;stroke-miterlimit:5" d="M 6.0104076,33.499184 H 41.321552 c 0,0 0.381573,0.110191 0.522198,0.555503 0.140625,0.445313 0.234375,0.6875 0.132812,1.054688 -0.101562,0.367187 -0.101562,0.820312 -0.484375,0.914062 -0.382812,0.09375 -1.894207,0.07215 -1.894207,0.07215 l -11.678311,0.01105 c 0,0 -0.03295,0.741016 -0.06029,0.803516 -0.02734,0.0625 -0.230469,0.542969 -0.328125,0.679688 -0.09766,0.136718 -0.875,0.828125 -0.964844,0.902343 -0.08984,0.07422 -0.359375,0.21875 -0.648437,0.359375 -0.289063,0.140625 -1.152659,0.31 -1.506212,0.337622 -0.353554,0.02762 -1.950068,0.03867 -2.31467,-0.09944 C 21.732485,38.95164 20.414062,38.234375 20.164062,37.960937 19.914062,37.6875 19.609375,37.25 19.554687,37.015625 19.5,36.78125 19.484375,36.132812 19.484375,36.132812 l -13.375,-0.02344 c 0,0 -0.6640625,-0.265625 -0.71875,-0.632813 -0.054687,-0.367187 -0.1015625,-0.78125 -0.054687,-0.9375 0.046875,-0.15625 0.09375,-0.328125 0.2109375,-0.523437 0.1171875,-0.195313 0.265625,-0.320313 0.4635326,-0.516441 z" />
+                    </symbol>
+                    {# Prueba: usuario de assets/Usuario.svg. Cabeza y cuerpo toman el color del CSS (.sesion-usuario svg); #}
+                    {# la corbata conserva su rojo del diseno original. #}
+                    <symbol viewBox="0 0 48 48" id="icon-usuario-nuevo"><ellipse cx="23.7983" cy="14.606257" rx="8.3334942" ry="8.6820755"/><path d="m 41.967968,-39.235153 a 18.444511,13.382769 0 0 1 -9.222256,11.589817 18.444511,13.382769 0 0 1 -18.444511,0 18.444511,13.382769 0 0 1 -9.2222558,-11.589817" transform="scale(1,-1)"/><path fill="#ff0000" d="m 22.388326,27.326163 c 0,0 0.190859,-0.253399 0.355693,-0.245225 0.164835,0.0083 0.702708,0 0.702708,0 l 1.301311,0.0327 c 0,0 0.728734,0.08173 0.806813,0.204355 0.07809,0.12261 0.04338,0.269747 0.04338,0.269747 l -0.537874,0.727503 -0.468474,0.58854 c 0,0 -0.459795,-0.155311 -0.815488,-0.08173 -0.355691,0.07358 -0.399068,0.09809 -0.399068,0.09809 z"/><path fill="#ff0000" d="m 23.386941,28.692406 -0.352525,0.791228 -0.2079,0.537163 c 0,0 -0.334447,1.27758 -0.325408,1.313873 0.0091,0.0363 -0.09943,0.70412 -0.09943,0.70412 l -0.307328,1.938144 -0.361564,2.446273 c 0,0 2.214577,1.560679 2.295929,1.509865 0.08137,-0.05081 2.151303,-1.379203 2.160343,-1.488088 0.0091,-0.108885 -0.641775,-4.29005 -0.641775,-4.29005 l -0.200237,-1.344198 -0.0403,-0.566319 c 0,0 -0.22835,-0.604074 -0.322378,-0.782061 -0.09403,-0.177987 -0.43655,-0.787454 -0.43655,-0.787454 0,0 -0.906685,-0.09169 -1.160878,0.01751 z"/></symbol>
+                    {# Prueba: sol y eclipse de assets/Sol.svg y assets/Eclipse.svg. El sol va relleno como la media luna; #}
+                    {# el eclipse conserva su diseno (anillo + mitad rellena), porque relleno completo seria un circulo liso. #}
+                    <symbol viewBox="0 0 48 48" id="icon-sol"><g fill="currentColor"><ellipse cx="23.878883" cy="24.258146" rx="9.9412994" ry="9.4780912"/><rect width="3.8485537" height="6.2306762" x="22.408287" y="7.1567049"/><rect width="3.3026385" height="6.2123194" x="-25.745718" y="6.3268995" transform="matrix(0.01837629,-0.99983114,0.99985556,0.01699604,0,0)"/><rect width="3.7806947" height="6.3473225" x="-2.3139491" y="16.233967" transform="matrix(0.74440983,-0.667723,0.69620268,0.71784527,0,0)"/><rect width="3.7773814" height="6.3529105" x="-2.2758884" y="-52.808044" transform="matrix(-0.72921729,0.68428222,-0.71221582,-0.70196056,0,0)"/><rect width="3.3650637" height="6.1017017" x="32.600658" y="-17.922609" transform="matrix(0.69968786,0.71444867,-0.74116796,0.67131963,0,0)"/><rect width="3.7014873" height="6.4782748" x="20.727047" y="-44.404022" transform="matrix(-0.04893028,0.9988022,-0.99897516,-0.04526186,0,0)"/><rect width="3.8485537" height="6.2306762" x="22.105556" y="35.371002"/><rect width="3.3650637" height="6.1017017" x="32.904293" y="11.684961" transform="matrix(0.69968786,0.71444867,-0.74116796,0.67131963,0,0)"/></g></symbol>
+                    <symbol viewBox="0 0 48 48" id="icon-eclipse"><ellipse fill="none" stroke="currentColor" stroke-width="2.5" cx="24.749823" cy="23.356806" rx="16.680248" ry="16.115192"/><path fill="currentColor" d="m -10.747198,-24.482801 a 12.835596,13.182343 0 0 1 -6.417798,11.416243 12.835596,13.182343 0 0 1 -12.835597,0 12.835596,13.182343 0 0 1 -6.417797,-11.416243" transform="matrix(0,-1,-1,0,0,0)"/></symbol>
+                    {# Media luna de assets/media_luna.svg (version invertida), rellena con currentColor para seguir el tema. #}
+                    <symbol viewBox="0 0 48 48" id="icon-media-luna"><path d="m 37.041095,40.125452 c 0,0 -1.273824,1.100121 -7.063932,1.331725 -5.790109,0.231605 -9.03257,-1.158021 -11.001207,-2.084439 -1.968637,-0.926417 -5.674306,-3.474065 -7.527141,-6.021713 -1.8528352,-2.547647 -2.9846192,-3.954489 -3.4349842,-6.533851 -0.450365,-2.579362 -0.614134,-5.28155 -0.655076,-6.427933 -0.04094,-1.146383 0.777903,-4.626475 0.777903,-4.626475 0,0 1.719574,-4.217051 2.9478422,-5.9775682 l 1.228268,-1.7605167 c 0,0 3.807629,-4.6674166 4.38082,-4.8721278 0.573192,-0.2047113 1.234087,0.040942 1.234087,0.040942 0,0 -2.954196,8.5383287 0.758776,15.4217037 0.633093,1.173675 1.064251,2.26369 1.563052,3.257013 0.92697,1.84599 1.802079,3.359379 2.496015,4.597958 0.562222,1.003487 1.347385,1.691674 1.755236,2.470752 0.279003,0.532951 0.815335,0.897222 1.178541,1.346652 0.260373,0.322185 0.636884,0.547877 0.939604,0.86321 2.779253,2.895053 3.068758,3.821472 6.36912,5.963812 3.300362,2.14234 4.053076,3.010856 4.053076,3.010856 z"/></symbol>
+                    <symbol viewBox="0 0 24 24" id="icon-usuario"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></symbol>
+                    <symbol viewBox="0 0 24 24" id="icon-panel-equipos"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="13" rx="1.5"/><path d="M9 20h6M12 16v4"/></g></symbol>
+                    <symbol viewBox="0 0 24 24" id="icon-panel-alertas"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17v.01"/></g></symbol>
+                    <symbol viewBox="0 0 24 24" id="icon-panel-historial"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></g></symbol>
+                    <symbol viewBox="0 0 24 24" id="icon-panel-comandos"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></g></symbol>
+                    <symbol viewBox="0 0 24 24" id="icon-panel-usuarios"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></g></symbol>
+                    <symbol viewBox="0 0 24 24" id="icon-panel-grupos"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-5.5 7-5.5s7 2 7 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5c2.5.5 4 2.5 4 5.5"/></g></symbol>
+                    <symbol viewBox="0 0 24 24" id="icon-panel-cerrar"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+                </svg>
+                <div class="campana-wrapper">
+                    <button id="btn-alertas" type="button" class="theme-toggle" onclick="alternarAlertas()" title="Alertas">
+                        <span class="sr-only">Ver alertas</span>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-campana" xlink:href="#icon-campana"></use></svg>
+                        <span id="alertas-contador" class="alertas-contador"{% if not alertas_no_leidas_count %} style="display:none;"{% endif %}>{{ alertas_no_leidas_count|default:0 }}</span>
+                    </button>
+                    <div id="alertas-dropdown" class="alertas-dropdown">
+                        {% if alertas_pendientes %}
+                        <ul class="alertas-lista">
+                            {% for alerta in alertas_pendientes %}
+                            <li class="alerta-item">
+                                <span class="badge {% if alerta.nivel == 'critico' %}badge-bad{% elif alerta.nivel == 'advertencia' %}badge-medio{% else %}badge-neutral{% endif %}">{{ alerta.get_nivel_display }}</span>
+                                <div class="alerta-texto">
+                                    <a href="{% url 'equipo_detalle' alerta.equipo.pk %}">{{ alerta.equipo.nombre }}</a>
+                                    <span>{{ alerta.mensaje }}</span>
+                                    <span class="detalle-footer">{{ alerta.timestamp }}</span>
+                                </div>
+                                <form method="post" action="{% url 'alerta_atender' alerta.pk %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="animated-button">
+                                        <span class="text">Marcar como atendida</span>
+                                    </button>
+                                </form>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="celda-vacia">Sin alertas pendientes.</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <button id="btn-theme-toggle" type="button" class="theme-toggle" onclick="cambiarTema()">
+                    <span class="sr-only" id="theme-toggle-label">Cambiar tema (actual: automático)</span>
+                    <svg viewBox="0 0 48 48" aria-hidden="true" class="theme-icon-when-auto"><use href="#icon-eclipse" xlink:href="#icon-eclipse"></use></svg>
+                    <svg viewBox="0 0 48 48" aria-hidden="true" class="theme-icon-when-dark"><use href="#icon-media-luna" xlink:href="#icon-media-luna"></use></svg>
+                    <svg viewBox="0 0 48 48" aria-hidden="true" class="theme-icon-when-light"><use href="#icon-sol" xlink:href="#icon-sol"></use></svg>
+                </button>
+
+                {% if user.is_staff %}
+                <button id="btn-admin-overlay" type="button" class="animated-button" onclick="abrirPanelAdmin()"
+                        aria-controls="admin-overlay" aria-expanded="false">
+                    <span class="text">Abrir Panel de Administración</span>
+                </button>
+                {% endif %}
+
+                <form method="post" action="{% url 'logout' %}" class="nav-logout-form">
+                    {% csrf_token %}
+                    <button type="submit" class="animated-button">
+                        <span class="text">Cerrar sesión</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {% if user.is_staff %}
+        {# Cada enlace solo aparece si el usuario puede ver esa seccion en el admin (permiso de ver o de cambiar). #}
+        <div id="panel-admin-fondo" class="panel-admin-fondo" onclick="cerrarPanelAdmin()"></div>
+        <aside id="admin-overlay" class="panel-admin" aria-label="Panel de administración">
+            <div class="panel-admin-encabezado">
+                <h2>Administración</h2>
+                <button type="button" class="panel-admin-cerrar" onclick="cerrarPanelAdmin()">
+                    <span class="sr-only">Cerrar panel</span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-panel-cerrar" xlink:href="#icon-panel-cerrar"></use></svg>
+                </button>
+            </div>
+
+            {% if perms.monitoreo.view_equipo or perms.monitoreo.change_equipo or perms.monitoreo.view_alerta or perms.monitoreo.change_alerta or perms.monitoreo.view_historialestado or perms.monitoreo.change_historialestado or perms.monitoreo.view_comandoremoto or perms.monitoreo.change_comandoremoto %}
+            <div class="panel-admin-seccion">
+                <span class="panel-admin-titulo">Monitoreo</span>
+                {% if perms.monitoreo.view_equipo or perms.monitoreo.change_equipo %}
+                <a class="panel-admin-enlace" href="{% url 'admin:monitoreo_equipo_changelist' %}">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-panel-equipos" xlink:href="#icon-panel-equipos"></use></svg>
+                    Equipos
+                </a>
+                {% endif %}
+                {% if perms.monitoreo.view_alerta or perms.monitoreo.change_alerta %}
+                <a class="panel-admin-enlace" href="{% url 'admin:monitoreo_alerta_changelist' %}?atendida__exact=0">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-panel-alertas" xlink:href="#icon-panel-alertas"></use></svg>
+                    Alertas
+                    {% if alertas_sin_atender_count %}
+                    <span class="panel-admin-contador">{{ alertas_sin_atender_count }}<span class="sr-only"> sin atender</span></span>
+                    {% endif %}
+                </a>
+                {% endif %}
+                {% if perms.monitoreo.view_historialestado or perms.monitoreo.change_historialestado %}
+                <a class="panel-admin-enlace" href="{% url 'admin:monitoreo_historialestado_changelist' %}">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-panel-historial" xlink:href="#icon-panel-historial"></use></svg>
+                    Historial de estados
+                </a>
+                {% endif %}
+                {% if perms.monitoreo.view_comandoremoto or perms.monitoreo.change_comandoremoto %}
+                <a class="panel-admin-enlace" href="{% url 'admin:monitoreo_comandoremoto_changelist' %}">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-panel-comandos" xlink:href="#icon-panel-comandos"></use></svg>
+                    Comandos remotos
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if perms.auth.view_user or perms.auth.change_user or perms.auth.view_group or perms.auth.change_group %}
+            <div class="panel-admin-seccion">
+                <span class="panel-admin-titulo">Usuarios</span>
+                {% if perms.auth.view_user or perms.auth.change_user %}
+                <a class="panel-admin-enlace" href="{% url 'admin:auth_user_changelist' %}">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-panel-usuarios" xlink:href="#icon-panel-usuarios"></use></svg>
+                    Usuarios
+                </a>
+                {% endif %}
+                {% if perms.auth.view_group or perms.auth.change_group %}
+                <a class="panel-admin-enlace" href="{% url 'admin:auth_group_changelist' %}">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-panel-grupos" xlink:href="#icon-panel-grupos"></use></svg>
+                    Grupos
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <a class="panel-admin-pie" href="{% url 'admin:index' %}">Ir al panel de administración completo &rarr;</a>
+        </aside>
+        {% endif %}
+    </nav>
+
+    <div id="toasts-container" class="toasts-container" aria-live="polite"></div>
+
+    {% if messages %}
+    <div class="container mensajes">
+        {% for message in messages %}
+        <p class="mensaje{% if message.tags %} mensaje-{{ message.tags }}{% endif %}">{{ message }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+
+    <script>
+        function abrirPanelAdmin() {
+            var panel = document.getElementById("admin-overlay");
+            if (!panel) {
+                return;
+            }
+            panel.classList.add("abierto");
+            document.getElementById("panel-admin-fondo").classList.add("abierto");
+            document.getElementById("btn-admin-overlay").setAttribute("aria-expanded", "true");
+            panel.querySelector(".panel-admin-cerrar").focus();
+        }
+
+        function cerrarPanelAdmin() {
+            var panel = document.getElementById("admin-overlay");
+            if (!panel || !panel.classList.contains("abierto")) {
+                return;
+            }
+            panel.classList.remove("abierto");
+            document.getElementById("panel-admin-fondo").classList.remove("abierto");
+            var boton = document.getElementById("btn-admin-overlay");
+            boton.setAttribute("aria-expanded", "false");
+            boton.focus();
+        }
+
+        document.addEventListener("keydown", function (evento) {
+            if (evento.key === "Escape") {
+                cerrarPanelAdmin();
+            }
+        });
+
+        var ETIQUETAS_TEMA = {
+            auto: "Cambiar tema (actual: automático)",
+            light: "Cambiar tema (actual: claro)",
+            dark: "Cambiar tema (actual: oscuro)",
+        };
+
+        function actualizarEtiquetaTema() {
+            var tema = localStorage.getItem('theme') || 'auto';
+            var etiqueta = document.getElementById('theme-toggle-label');
+            if (etiqueta) {
+                etiqueta.textContent = ETIQUETAS_TEMA[tema] || ETIQUETAS_TEMA.auto;
+            }
+        }
+
+        function cambiarTema() {
+            var prefiereOscuro = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            var actual = localStorage.getItem('theme') || 'auto';
+            var siguiente;
+            if (prefiereOscuro) {
+                siguiente = actual === 'auto' ? 'light' : (actual === 'light' ? 'dark' : 'auto');
+            } else {
+                siguiente = actual === 'auto' ? 'dark' : (actual === 'dark' ? 'light' : 'auto');
+            }
+            localStorage.setItem('theme', siguiente);
+            document.documentElement.dataset.theme = siguiente;
+            actualizarEtiquetaTema();
+        }
+
+        actualizarEtiquetaTema();
+
+        document.querySelectorAll('.mensaje').forEach(function (mensaje) {
+            setTimeout(function () {
+                mensaje.classList.add('oculto');
+            }, 5000);
+        });
+
+        function obtenerCookie(nombre) {
+            var valor = null;
+            document.cookie.split(';').forEach(function (parte) {
+                parte = parte.trim();
+                if (parte.startsWith(nombre + '=')) {
+                    valor = decodeURIComponent(parte.slice(nombre.length + 1));
+                }
+            });
+            return valor;
+        }
+
+        function reproducirSonidoAlerta() {
+            try {
+                var ContextoAudio = window.AudioContext || window.webkitAudioContext;
+                var contexto = new ContextoAudio();
+                var oscilador = contexto.createOscillator();
+                var volumen = contexto.createGain();
+                oscilador.type = 'sine';
+                oscilador.frequency.value = 880;
+                volumen.gain.setValueAtTime(0.15, contexto.currentTime);
+                volumen.gain.exponentialRampToValueAtTime(0.001, contexto.currentTime + 0.4);
+                oscilador.connect(volumen);
+                volumen.connect(contexto.destination);
+                oscilador.start();
+                oscilador.stop(contexto.currentTime + 0.4);
+            } catch (error) {
+                console.error('No se pudo reproducir el sonido de alerta:', error);
+            }
+        }
+
+        var NIVEL_A_BADGE = { critico: 'badge-bad', advertencia: 'badge-medio', info: 'badge-neutral' };
+        var alertasYaMostradas = JSON.parse(localStorage.getItem('alertasToastMostradas') || '[]');
+
+        function mostrarToastAlerta(alerta) {
+            var contenedor = document.getElementById('toasts-container');
+            if (!contenedor) {
+                return;
+            }
+            var toast = document.createElement('div');
+            toast.className = 'toast-alerta';
+            var badgeClase = NIVEL_A_BADGE[alerta.nivel] || 'badge-neutral';
+            var badge = document.createElement('span');
+            badge.className = 'badge ' + badgeClase;
+            badge.textContent = alerta.equipo;
+            var texto = document.createElement('span');
+            texto.textContent = alerta.mensaje;
+            toast.appendChild(badge);
+            toast.appendChild(texto);
+            contenedor.appendChild(toast);
+            setTimeout(function () {
+                toast.classList.add('oculto');
+                setTimeout(function () { toast.remove(); }, 400);
+            }, 6000);
+        }
+
+        function revisarAlertasNoLeidas() {
+            fetch("{% url 'alertas_no_leidas' %}")
+                .then(function (respuesta) { return respuesta.ok ? respuesta.json() : null; })
+                .then(function (datos) {
+                    if (!datos) {
+                        return;
+                    }
+                    var contador = document.getElementById('alertas-contador');
+                    if (contador) {
+                        contador.textContent = datos.total;
+                        contador.style.display = datos.total ? '' : 'none';
+                    }
+                    var huboNueva = false;
+                    datos.alertas.forEach(function (alerta) {
+                        if (alertasYaMostradas.indexOf(alerta.id) === -1) {
+                            mostrarToastAlerta(alerta);
+                            alertasYaMostradas.push(alerta.id);
+                            huboNueva = true;
+                        }
+                    });
+                    if (huboNueva) {
+                        localStorage.setItem('alertasToastMostradas', JSON.stringify(alertasYaMostradas));
+                        reproducirSonidoAlerta();
+                    }
+                })
+                .catch(function (error) {
+                    console.error('No se pudieron revisar las alertas:', error);
+                });
+        }
+
+        function marcarAlertasLeidas() {
+            fetch("{% url 'alertas_marcar_leidas' %}", {
+                method: 'POST',
+                headers: { 'X-CSRFToken': obtenerCookie('csrftoken') },
+            }).then(function () {
+                var contador = document.getElementById('alertas-contador');
+                if (contador) {
+                    contador.textContent = '0';
+                    contador.style.display = 'none';
+                }
+            }).catch(function (error) {
+                console.error('No se pudieron marcar las alertas como leídas:', error);
+            });
+        }
+
+        function alternarAlertas() {
+            var desplegable = document.getElementById('alertas-dropdown');
+            if (!desplegable) {
+                return;
+            }
+            var abriendo = !desplegable.classList.contains('abierto');
+            desplegable.classList.toggle('abierto');
+            if (abriendo) {
+                marcarAlertasLeidas();
+            }
+        }
+
+        document.addEventListener('click', function (evento) {
+            var desplegable = document.getElementById('alertas-dropdown');
+            var envoltorio = document.querySelector('.campana-wrapper');
+            if (desplegable && envoltorio && !envoltorio.contains(evento.target)) {
+                desplegable.classList.remove('abierto');
+            }
+        });
+
+        revisarAlertasNoLeidas();
+        setInterval(revisarAlertasNoLeidas, 20000);
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

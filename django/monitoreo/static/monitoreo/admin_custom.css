@@ -1,0 +1,259 @@
+:root,
+html[data-theme="dark"] {
+    color-scheme: dark;
+
+    --primary: #011b8b;
+    --secondary: #011b8b;
+    --accent: #9fc1ff;
+    --primary-fg: #ffffff;
+
+    --body-fg: #e8e8e8;
+    --body-bg: #161616;
+    --body-quiet-color: #9a9a9a;
+    --body-medium-color: #c8c8c8;
+    --body-loud-color: #ffffff;
+
+    --header-color: #9fc1ff;
+    --header-branding-color: var(--accent);
+    --header-bg: var(--secondary);
+    --header-link-color: #ffffff;
+
+    --breadcrumbs-fg: #cfd8ea;
+    --breadcrumbs-link-fg: #cfe0ff;
+    --breadcrumbs-bg: #01125c;
+
+    --link-fg: #4C8BF5;
+    --link-hover-color: #7badff;
+    --link-selected-fg: #8fa8ff;
+
+    --hairline-color: #333333;
+    --border-color: #3a3a3a;
+
+    --error-fg: #ef5350;
+
+    --message-debug-bg: #3a3a3a;
+    --message-info-bg: #1c3a63;
+    --message-success-bg: #14432a;
+    --message-warning-bg: #4a3405;
+    --message-error-bg: #4a1a15;
+
+    --darkened-bg: #1f1f1f;
+    --selected-bg: #262626;
+    --selected-row: #1a2b52;
+
+    --button-fg: #ffffff;
+    --button-bg: var(--secondary);
+    --button-hover-bg: #01125c;
+    --default-button-bg: #01125c;
+    --default-button-hover-bg: var(--secondary);
+    --close-button-bg: #333333;
+    --close-button-hover-bg: #4a4a4a;
+    --delete-button-bg: #c0392b;
+    --delete-button-hover-bg: #a52d21;
+}
+
+html[data-theme="light"] {
+    color-scheme: light;
+
+    --primary: #011b8b;
+    --secondary: #011b8b;
+    --accent: #9fc1ff;
+    --primary-fg: #ffffff;
+
+    --body-fg: #1a1a1a;
+    --body-bg: #eef1f5;
+    --body-quiet-color: #6b6b6b;
+    --body-medium-color: #444444;
+    --body-loud-color: #000000;
+
+    --header-color: #9fc1ff;
+    --header-branding-color: var(--accent);
+    --header-bg: var(--secondary);
+    --header-link-color: #ffffff;
+
+    --breadcrumbs-fg: #cfd8ea;
+    --breadcrumbs-link-fg: #cfe0ff;
+    --breadcrumbs-bg: #01125c;
+
+    --link-fg: #011b8b;
+    --link-hover-color: #01125c;
+    --link-selected-fg: #2547a8;
+
+    --hairline-color: #e0e0e0;
+    --border-color: #d0d3d9;
+
+    --error-fg: #c0392b;
+
+    --message-debug-bg: #efefef;
+    --message-info-bg: #ccefff;
+    --message-success-bg: #ddffe6;
+    --message-warning-bg: #fff3cd;
+    --message-error-bg: #ffe5e2;
+
+    --darkened-bg: #f4f6f9;
+    --selected-bg: #eef2f7;
+    --selected-row: #fff6d5;
+
+    --button-fg: #ffffff;
+    --button-bg: var(--secondary);
+    --button-hover-bg: #01125c;
+    --default-button-bg: #01125c;
+    --default-button-hover-bg: var(--secondary);
+    --close-button-bg: #747474;
+    --close-button-hover-bg: #333333;
+    --delete-button-bg: #c0392b;
+    --delete-button-hover-bg: #a52d21;
+}
+
+@media (prefers-color-scheme: light) {
+    html[data-theme="auto"] {
+        color-scheme: light;
+
+        --primary: #011b8b;
+        --secondary: #011b8b;
+        --accent: #9fc1ff;
+        --primary-fg: #ffffff;
+
+        --body-fg: #1a1a1a;
+        --body-bg: #eef1f5;
+        --body-quiet-color: #6b6b6b;
+        --body-medium-color: #444444;
+        --body-loud-color: #000000;
+
+        --header-color: #9fc1ff;
+        --header-branding-color: var(--accent);
+        --header-bg: var(--secondary);
+        --header-link-color: #ffffff;
+
+        --breadcrumbs-fg: #cfd8ea;
+        --breadcrumbs-link-fg: #cfe0ff;
+        --breadcrumbs-bg: #01125c;
+
+        --link-fg: #011b8b;
+        --link-hover-color: #01125c;
+        --link-selected-fg: #2547a8;
+
+        --hairline-color: #e0e0e0;
+        --border-color: #d0d3d9;
+
+        --error-fg: #c0392b;
+
+        --message-debug-bg: #efefef;
+        --message-info-bg: #ccefff;
+        --message-success-bg: #ddffe6;
+        --message-warning-bg: #fff3cd;
+        --message-error-bg: #ffe5e2;
+
+        --darkened-bg: #f4f6f9;
+        --selected-bg: #eef2f7;
+        --selected-row: #fff6d5;
+
+        --button-fg: #ffffff;
+        --button-bg: var(--secondary);
+        --button-hover-bg: #01125c;
+        --default-button-bg: #01125c;
+        --default-button-hover-bg: var(--secondary);
+        --close-button-bg: #747474;
+        --close-button-hover-bg: #333333;
+        --delete-button-bg: #c0392b;
+        --delete-button-hover-bg: #a52d21;
+    }
+}
+
+/*
+  Selector de permisos (el widget de dos columnas "Disponible / Elegidos"
+  que usan los formularios de Grupo y Usuario). Por defecto Django lo deja
+  con cajas muy angostas y opciones pegadas entre si, dificil de leer con
+  tantos permisos listados.
+*/
+.selector {
+    gap: 12px;
+}
+
+.selector-available,
+.selector-chosen {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    overflow: hidden;
+    background-color: var(--darkened-bg);
+}
+
+.selector-available h2,
+.selector-chosen h2 {
+    border-radius: 0;
+    font-size: 12.5px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    padding: 10px 14px;
+}
+
+.selector-filter {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--body-bg);
+}
+
+.selector-filter input {
+    border-radius: 8px !important;
+    border: 1px solid var(--border-color) !important;
+    padding: 6px 10px 6px 28px !important;
+}
+
+.selector select.filtered {
+    border: none;
+    border-radius: 0;
+    background-color: var(--body-bg);
+}
+
+.selector select.filtered option {
+    padding: 6px 10px;
+    border-radius: 6px;
+}
+
+.selector select.filtered option:checked {
+    background-color: var(--selected-bg);
+    color: var(--link-selected-fg);
+}
+
+.selector-chooser {
+    align-self: center;
+    background: transparent;
+}
+
+.selector-chooser-all,
+.selector-add,
+.selector-remove {
+    background-color: var(--button-bg);
+    border-radius: 100px;
+}
+
+.selector-chooseall,
+.selector-clearall {
+    display: block;
+    text-align: center;
+    padding: 8px 10px;
+    font-size: 12.5px;
+    border-top: 1px solid var(--border-color);
+    background-color: var(--body-bg);
+}
+
+/*
+  Textos de ayuda de los campos (ej. los requisitos de la contraseña).
+  Django 6 los pone entre la etiqueta y el campo, y les quita las viñetas a
+  las listas, asi que los requisitos se ven como lineas sueltas encima del
+  input. Aqui se mandan debajo del campo y se muestran como lista.
+*/
+.aligned .flex-container > div.help {
+    order: 1;
+    margin-top: -4px;
+}
+
+form .aligned div.help ul {
+    padding-left: 18px;
+    margin: 0;
+}
+
+form .aligned div.help ul li {
+    list-style: disc;
+    padding: 1px 0;
+}

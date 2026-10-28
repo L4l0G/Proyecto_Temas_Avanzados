@@ -1,0 +1,210 @@
+{% extends 'monitoreo/base.html' %}
+
+{% block title %}{{ equipo.nombre }} - {{ nombre_sistema }}{% endblock %}
+
+{% block content %}
+    <div class="container">
+        <a href="{% url 'tablero' %}" class="volver-link">&larr; Volver al tablero</a>
+
+        <div class="page-header">
+            <h1>{{ equipo.nombre }}</h1>
+            <span class="subtitle">{{ equipo.ubicacion|default:"Sin ubicación registrada" }}</span>
+        </div>
+
+        <form method="post" action="{% url 'equipo_eliminar' equipo.pk %}" class="eliminar-form" onsubmit="return confirm('¿Seguro que quieres eliminar \'{{ equipo.nombre|escapejs }}\' del tablero? Esta acción no se puede deshacer.');">
+            {% csrf_token %}
+            <button type="submit" class="animated-button animated-button-peligro">
+                <span class="text">Eliminar equipo</span>
+            </button>
+        </form>
+
+        <div class="detalle-card" id="detalle-contenido">
+            <div class="detalle-estado">
+                <span class="badge {% if equipo.estado_visible == 'activo' %}badge-ok{% elif equipo.estado_visible == 'mantenimiento' %}badge-medio{% else %}badge-bad{% endif %}">{{ equipo.estado_visible_display }}</span>
+                {% if equipo.conectado_visible %}
+                <span class="badge badge-ok">Conectado</span>
+                {% else %}
+                <span class="badge badge-bad">Sin conexión</span>
+                {% endif %}
+            </div>
+
+            {% if ultimo_reporte %}
+            <div class="detalle-metricas">
+                <div class="metrica-tile">
+                    <span class="metrica-etiqueta">CPU</span>
+                    <span class="metrica-valor {{ metricas.cpu_clase }}">{{ ultimo_reporte.cpu_porcentaje }}%</span>
+                    <div class="metrica-barra" role="progressbar" aria-valuenow="{{ ultimo_reporte.cpu_porcentaje|floatformat:0 }}" aria-valuemin="0" aria-valuemax="100" aria-label="Uso de CPU">
+                        <div class="metrica-barra-relleno {{ metricas.cpu_clase }}" style="width: {{ ultimo_reporte.cpu_porcentaje }}%;"></div>
+                    </div>
+                </div>
+                <div class="metrica-tile">
+                    <span class="metrica-etiqueta">Memoria</span>
+                    <span class="metrica-valor {{ metricas.memoria_clase }}">{{ ultimo_reporte.memoria_porcentaje }}%</span>
+                    <div class="metrica-barra" role="progressbar" aria-valuenow="{{ ultimo_reporte.memoria_porcentaje|floatformat:0 }}" aria-valuemin="0" aria-valuemax="100" aria-label="Uso de memoria">
+                        <div class="metrica-barra-relleno {{ metricas.memoria_clase }}" style="width: {{ ultimo_reporte.memoria_porcentaje }}%;"></div>
+                    </div>
+                </div>
+                <div class="metrica-tile">
+                    <span class="metrica-etiqueta">Disco</span>
+                    <span class="metrica-valor {{ metricas.disco_clase }}">{{ ultimo_reporte.disco_porcentaje }}%</span>
+                    <div class="metrica-barra" role="progressbar" aria-valuenow="{{ ultimo_reporte.disco_porcentaje|floatformat:0 }}" aria-valuemin="0" aria-valuemax="100" aria-label="Uso de disco">
+                        <div class="metrica-barra-relleno {{ metricas.disco_clase }}" style="width: {{ ultimo_reporte.disco_porcentaje }}%;"></div>
+                    </div>
+                </div>
+            </div>
+            <p class="detalle-footer">Último reporte: {{ ultimo_reporte.timestamp }}</p>
+            {% else %}
+            <p class="celda-vacia">Sin reportes todavía</p>
+            {% endif %}
+
+            {% if consejos %}
+            <div class="consejos">
+                <p class="consejos-titulo">Posibles causas y qué hacer</p>
+                <ul>
+                    {% for consejo in consejos %}
+                    <li>{{ consejo }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if equipo.procesador or equipo.sistema_operativo or equipo.ram_total_mb or equipo.disco_total_gb or equipo.numero_serie %}
+        <div class="detalle-card">
+            <p class="consejos-titulo">Características del equipo</p>
+            <div class="specs-grid">
+                {% if equipo.procesador %}
+                <div class="spec-tile">
+                    <span class="metrica-etiqueta">Procesador</span>
+                    <span class="spec-valor">{{ equipo.procesador }}</span>
+                </div>
+                {% endif %}
+                {% if equipo.ram_total_mb %}
+                <div class="spec-tile">
+                    <span class="metrica-etiqueta">RAM</span>
+                    <span class="spec-valor">{{ equipo.ram_total_mb|floatformat:0 }} MB</span>
+                </div>
+                {% endif %}
+                {% if equipo.disco_total_gb %}
+                <div class="spec-tile">
+                    <span class="metrica-etiqueta">Disco</span>
+                    <span class="spec-valor">{{ equipo.disco_total_gb|floatformat:0 }} GB</span>
+                </div>
+                {% endif %}
+                {% if equipo.sistema_operativo %}
+                <div class="spec-tile">
+                    <span class="metrica-etiqueta">Sistema operativo</span>
+                    <span class="spec-valor">{{ equipo.sistema_operativo }}</span>
+                </div>
+                {% endif %}
+                {% if equipo.numero_serie %}
+                <div class="spec-tile">
+                    <span class="metrica-etiqueta">Número de serie</span>
+                    <button type="button" class="spec-valor spec-oculto" title="Clic para mostrar/ocultar"
+                            data-url="{% url 'equipo_datos_sensibles' equipo.pk %}"
+                            data-campo="numero_serie"
+                            onclick="toggleOculto(this)">••••••••</button>
+                </div>
+                {% endif %}
+                {% if equipo.direccion_ip %}
+                <div class="spec-tile">
+                    <span class="metrica-etiqueta">Dirección IP</span>
+                    <button type="button" class="spec-valor spec-oculto" title="Clic para mostrar/ocultar"
+                            data-url="{% url 'equipo_datos_sensibles' equipo.pk %}"
+                            data-campo="direccion_ip"
+                            onclick="toggleOculto(this)">•••.•••.•••.•••</button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="detalle-card">
+            <p class="consejos-titulo">Emparejamiento</p>
+            {% if equipo.token %}
+            <div class="detalle-estado">
+                <span class="badge badge-ok">Dispositivo emparejado</span>
+            </div>
+            <form method="post" action="{% url 'equipo_desemparejar' equipo.pk %}" onsubmit="return confirm('¿Desemparejar el dispositivo actual de \'{{ equipo.nombre|escapejs }}\'?\n\nDejará de reportar hasta que emparejes uno nuevo con el código que se generará.');">
+                {% csrf_token %}
+                <button type="submit" class="animated-button animated-button-peligro">
+                    <span class="text">Desemparejar dispositivo</span>
+                </button>
+            </form>
+            {% elif equipo.codigo_emparejamiento %}
+            <div class="detalle-estado">
+                <span class="badge badge-medio">Sin dispositivo emparejado</span>
+            </div>
+            <p class="detalle-footer">Código de emparejamiento pendiente: <strong>{{ equipo.codigo_emparejamiento }}</strong></p>
+            {% else %}
+            <div class="detalle-estado">
+                <span class="badge badge-neutral">Sin dispositivo emparejado</span>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if programas_detenibles %}
+        <div class="detalle-card detener-card">
+            <p class="consejos-titulo detener-titulo">Detener un programa en esta PC</p>
+            <form method="post" action="{% url 'equipo_detener_proceso' equipo.pk %}" class="detener-form" onsubmit="return confirm('¿Desea detener ' + this.proceso.options[this.proceso.selectedIndex].text + ' en ' + '{{ equipo.nombre|escapejs }}' + '?\n\nSe aplicará en el próximo reporte del equipo (máximo 1 minuto).');">
+                {% csrf_token %}
+                <select name="proceso" required>
+                    {% for valor, etiqueta in programas_detenibles %}
+                    <option value="{{ valor }}">{{ etiqueta }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="animated-button">
+                    <span class="text">Detener</span>
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    async function actualizarDetalle() {
+        try {
+            const respuesta = await fetch(window.location.href);
+            const html = await respuesta.text();
+            const doc = new DOMParser().parseFromString(html, "text/html");
+            const nuevo = doc.getElementById("detalle-contenido");
+            const actual = document.getElementById("detalle-contenido");
+            if (nuevo && actual) {
+                actual.replaceWith(nuevo);
+            }
+        } catch (error) {
+            console.error("No se pudo actualizar el detalle del equipo:", error);
+        }
+    }
+
+    setInterval(actualizarDetalle, 60000);
+
+    async function toggleOculto(boton) {
+        if (boton.dataset.cargado === '1') {
+            boton.classList.toggle('revelado');
+            return;
+        }
+        if (boton.dataset.cargando === '1') {
+            return;
+        }
+        boton.dataset.cargando = '1';
+        try {
+            const respuesta = await fetch(boton.dataset.url);
+            if (!respuesta.ok) {
+                throw new Error('No se pudo obtener el dato');
+            }
+            const datos = await respuesta.json();
+            boton.textContent = datos[boton.dataset.campo] || 'Sin datos';
+            boton.dataset.cargado = '1';
+            boton.classList.add('revelado');
+        } catch (error) {
+            console.error('No se pudo obtener el dato solicitado:', error);
+            boton.textContent = 'Error al cargar';
+        } finally {
+            delete boton.dataset.cargando;
+        }
+    }
+</script>
+{% endblock %}

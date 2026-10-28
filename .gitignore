@@ -1,0 +1,17 @@
+# Entorno virtual de Python
+.venv/
+__pycache__/
+*.pyc
+
+# Variables de entorno / secretos
+*.env
+
+# Agente: build de PyInstaller y archivos generados en runtime (logs,
+# configuracion con el token real de cada equipo emparejado)
+agente/build/
+agente/dist/
+agente/*.log
+agente/config_agente.json
+
+# Salida de "manage.py collectstatic" (se regenera en cada deploy)
+django/staticfiles/

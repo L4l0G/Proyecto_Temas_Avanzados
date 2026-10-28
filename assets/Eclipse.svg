@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="48"
+   height="48"
+   viewBox="0 0 48 48"
+   version="1.1"
+   id="svg1"
+   xml:space="preserve"
+   sodipodi:docname="Eclipse.svg"
+   inkscape:version="1.4.4 (dcaf3e7, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="px"
+     inkscape:zoom="2.9720582"
+     inkscape:cx="-93.201405"
+     inkscape:cy="-35.160819"
+     inkscape:window-width="1920"
+     inkscape:window-height="1009"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" /><defs
+     id="defs1" /><g
+     inkscape:label="Capa 1"
+     inkscape:groupmode="layer"
+     id="layer1"><ellipse
+       style="fill:#161616;stroke:#ffffff;stroke-width:0.270533;stroke-miterlimit:5"
+       id="path1"
+       cx="24.749823"
+       cy="23.356806"
+       rx="16.680248"
+       ry="16.115192" /><path
+       style="fill:#ffffff;fill-opacity:1;stroke:#ffffff;stroke-width:0.24534;stroke-miterlimit:5;stroke-opacity:1"
+       id="path2"
+       sodipodi:arc-type="arc"
+       sodipodi:type="arc"
+       sodipodi:cx="-23.582794"
+       sodipodi:cy="-24.482801"
+       sodipodi:rx="12.835596"
+       sodipodi:ry="13.182343"
+       sodipodi:start="0"
+       sodipodi:end="3.1415927"
+       d="m -10.747198,-24.482801 a 12.835596,13.182343 0 0 1 -6.417798,11.416243 12.835596,13.182343 0 0 1 -12.835597,0 12.835596,13.182343 0 0 1 -6.417797,-11.416243"
+       transform="matrix(0,-1,-1,0,0,0)"
+       sodipodi:open="true" /></g></svg>

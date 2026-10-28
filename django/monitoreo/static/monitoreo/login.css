@@ -1,0 +1,91 @@
+*{
+    box-sizing: border-box;
+}
+
+  *:focus {
+    outline: none;
+}
+
+h1{
+    color: #fff;
+    font-size: 2em;
+    margin-bottom: 32px;
+    margin-top: 0;
+    text-align: center;
+}
+
+body{
+    background-color: #161616;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: 16px;
+}
+
+/* Sin esto, .login-container (hijo del body flex) se encoge al ancho minimo
+   de los inputs y el max-width de .login-box nunca llega a aplicarse. */
+.login-container {
+    width: 100%;
+    max-width: 440px;
+}
+
+.login-box {
+    background-color: #1e1e1e;
+    padding: 60px 44px;
+    border-radius: 12px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    width: 100%;
+}
+
+.login-box form p {
+    margin: 0 0 24px;
+}
+
+.login-box label {
+    display: block;
+    margin-bottom: 4px;
+}
+
+@media (max-width: 400px) {
+    .login-box {
+        padding: 48px 24px;
+    }
+}
+
+.text-input,
+input[type="text"],
+input[type="password"] {
+    width: 100%;
+    padding: 12px;
+    margin: 8px 0;
+    border: none;
+    border-radius: 6px;
+    background-color: #2e2e2e;
+    color: #fff;
+    font-size: 15px;
+}
+
+.button {
+    width: 100%;
+    margin-top: 12px;
+    padding: 14px;
+    border: none;
+    border-radius: 5px;
+    background-color: #4CAF50;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    font-style: italic;
+    font-weight: bold;
+}
+
+.login-error{
+    color: #ff4d4d;
+    font-size: 14px;
+    margin-top: 10px;
+    text-align: center;
+}

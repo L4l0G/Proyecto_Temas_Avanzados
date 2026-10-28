@@ -1,0 +1,67 @@
+# Traducciones propias del proyecto. Tienen prioridad sobre las de Django (LOCALE_PATHS en settings.py).
+# La traduccion es-MX de Django usa formas como "seleccionados/as" o "Todos/as"; aqui se reemplazan por
+# frases sin marca de genero, y se traducen textos de Django 6.1 que aun no venian en espanol.
+# Despues de editar este archivo hay que regenerar el .mo:  python locale/compilar.py
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Run"
+msgstr "Ejecutar"
+
+msgid "- Select an option -"
+msgstr "- Seleccione una opción -"
+
+msgid "All"
+msgstr "Todos"
+
+msgid "Show all"
+msgstr "Mostrar todo"
+
+msgid "Add another %(verbose_name)s"
+msgstr "Agregar %(verbose_name)s"
+
+msgid "0 of %(cnt)s selected"
+msgstr "Selección: 0 de %(cnt)s"
+
+msgid "%(total_count)s selected"
+msgid_plural "All %(total_count)s selected"
+msgstr[0] "Selección: %(total_count)s"
+msgstr[1] "Selección: los %(total_count)s elementos"
+
+# Paginas de confirmacion de borrado. La traduccion es-MX trae errores ("Resúmen", "el seleccionado grupo ?")
+# y varios de sus textos ya no coinciden con los de Django 6.1, asi que caian al ingles o a "Si" sin acento.
+# Se redactan sin marca de genero porque la misma frase sirve para grupos, alertas, equipos, etc.
+msgid "Summary"
+msgstr "Resumen"
+
+msgid "Objects"
+msgstr "Objetos"
+
+msgid "Delete multiple objects"
+msgstr "Eliminar selección"
+
+msgid "Yes, I’m sure"
+msgstr "Sí, eliminar"
+
+msgid "No, take me back"
+msgstr "No, regresar"
+
+msgid "Are you sure you want to delete the selected %(objects_name)s? All of the following objects and their related items will be deleted:"
+msgstr "¿Desea eliminar la selección (%(objects_name)s)? También se eliminarán todos los objetos y elementos relacionados que aparecen abajo:"
+
+msgid "Deleting the selected %(objects_name)s would require deleting the following protected related objects:"
+msgstr "Para eliminar la selección (%(objects_name)s) primero habría que eliminar estos objetos relacionados protegidos:"
+
+msgid "Deleting the selected %(objects_name)s would result in deleting related objects, but your account doesn't have permission to delete the following types of objects:"
+msgstr "Eliminar la selección (%(objects_name)s) también eliminaría objetos relacionados, pero su cuenta no tiene permiso para eliminar estos tipos de objetos:"
+
+msgid "Are you sure you want to delete the %(object_name)s “%(escaped_object)s”? All of the following related items will be deleted:"
+msgstr "¿Desea eliminar “%(escaped_object)s” (%(object_name)s)? También se eliminarán los elementos relacionados que aparecen abajo:"
+
+msgid "Deleting the %(object_name)s “%(escaped_object)s” would require deleting the following protected related objects:"
+msgstr "Para eliminar “%(escaped_object)s” (%(object_name)s) primero habría que eliminar estos objetos relacionados protegidos:"
+
+msgid "Deleting the %(object_name)s “%(escaped_object)s” would result in deleting related objects, but your account doesn't have permission to delete the following types of objects:"
+msgstr "Eliminar “%(escaped_object)s” (%(object_name)s) también eliminaría objetos relacionados, pero su cuenta no tiene permiso para eliminar estos tipos de objetos:"

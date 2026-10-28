@@ -1,0 +1,123 @@
+{% extends 'monitoreo/base.html' %}
+
+{% block title %}Tablero de Equipos - {{ nombre_sistema }}{% endblock %}
+
+{% block content %}
+    <div class="container">
+        <div class="page-header">
+            <h1>Tablero de Equipos</h1>
+            <span class="subtitle">Última actualización: <span id="ultima-actualizacion">ahora</span></span>
+        </div>
+
+        <div class="filtros-tablero">
+            <input type="search" id="filtro-nombre" placeholder="Buscar por nombre..." aria-label="Buscar equipo por nombre">
+            <select id="filtro-estado" aria-label="Filtrar por estado">
+                <option value="">Todos los estados</option>
+                <option value="activo">Activo</option>
+                <option value="mantenimiento">En mantenimiento</option>
+                <option value="inactivo">Inactivo</option>
+            </select>
+            {% if ubicaciones %}
+            <select id="filtro-ubicacion" aria-label="Filtrar por ubicación">
+                <option value="">Todas las ubicaciones</option>
+                {% for ubicacion in ubicaciones %}
+                <option value="{{ ubicacion }}">{{ ubicacion }}</option>
+                {% endfor %}
+            </select>
+            {% endif %}
+            <select id="filtro-tipo-falla" aria-label="Filtrar por tipo de falla">
+                <option value="">Todos los tipos de falla</option>
+                <option value="sin_respuesta">Sin respuesta</option>
+                <option value="cpu_alto">CPU alto</option>
+                <option value="memoria_alta">Memoria alta</option>
+                <option value="disco_lleno">Disco lleno</option>
+            </select>
+        </div>
+
+        <div id="equipos-grid" class="equipos-grid">
+            {% for equipo in equipos %}
+            <a href="{% url 'equipo_detalle' equipo.pk %}" class="equipo-card"
+               data-nombre="{{ equipo.nombre|lower }}"
+               data-estado="{{ equipo.estado_visible }}"
+               data-ubicacion="{{ equipo.ubicacion }}"
+               data-tipo-falla="{{ equipo.tipos_falla }}">
+                <svg class="equipo-icono" viewBox="0 0 24 24" width="48" height="48" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="3" width="20" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+                    <path d="M9 20h6M12 16v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                </svg>
+                <span class="equipo-nombre">{{ equipo.nombre }}</span>
+                <span class="sr-only">Estado: {{ equipo.estado_visible_display }}</span>
+            </a>
+            {% empty %}
+            <p class="celda-vacia">No hay equipos registrados.</p>
+            {% endfor %}
+        </div>
+        <p id="sin-resultados" class="celda-vacia" style="display:none;">Ningún equipo coincide con el filtro.</p>
+    </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function aplicarFiltros() {
+        const campoNombre = document.getElementById("filtro-nombre");
+        const campoEstado = document.getElementById("filtro-estado");
+        const campoUbicacion = document.getElementById("filtro-ubicacion");
+        const campoTipoFalla = document.getElementById("filtro-tipo-falla");
+        const nombre = campoNombre ? campoNombre.value.trim().toLowerCase() : "";
+        const estado = campoEstado ? campoEstado.value : "";
+        const ubicacion = campoUbicacion ? campoUbicacion.value : "";
+        const tipoFalla = campoTipoFalla ? campoTipoFalla.value : "";
+
+        const tarjetas = document.querySelectorAll("#equipos-grid .equipo-card");
+        let visibles = 0;
+        tarjetas.forEach(function (tarjeta) {
+            const coincideNombre = !nombre || tarjeta.dataset.nombre.includes(nombre);
+            const coincideEstado = !estado || tarjeta.dataset.estado === estado;
+            const coincideUbicacion = !ubicacion || tarjeta.dataset.ubicacion === ubicacion;
+            const tiposFallaTarjeta = (tarjeta.dataset.tipoFalla || "").split(" ");
+            const coincideTipoFalla = !tipoFalla || tiposFallaTarjeta.includes(tipoFalla);
+            const visible = coincideNombre && coincideEstado && coincideUbicacion && coincideTipoFalla;
+            tarjeta.style.display = visible ? "" : "none";
+            if (visible) {
+                visibles += 1;
+            }
+        });
+
+        const sinResultados = document.getElementById("sin-resultados");
+        if (sinResultados) {
+            sinResultados.style.display = (tarjetas.length && visibles === 0) ? "block" : "none";
+        }
+    }
+
+    ["filtro-nombre", "filtro-estado", "filtro-ubicacion", "filtro-tipo-falla"].forEach(function (id) {
+        const campo = document.getElementById(id);
+        if (campo) {
+            campo.addEventListener("input", aplicarFiltros);
+            campo.addEventListener("change", aplicarFiltros);
+        }
+    });
+
+    async function actualizarTablero() {
+        try {
+            const respuesta = await fetch(window.location.href);
+            const html = await respuesta.text();
+            const doc = new DOMParser().parseFromString(html, "text/html");
+            const gridNuevo = doc.getElementById("equipos-grid");
+            const gridActual = document.getElementById("equipos-grid");
+            if (gridNuevo && gridActual) {
+                gridActual.replaceWith(gridNuevo);
+                aplicarFiltros();
+            }
+            const marcaTiempo = document.getElementById("ultima-actualizacion");
+            if (marcaTiempo) {
+                marcaTiempo.textContent = new Date().toLocaleTimeString();
+            }
+        } catch (error) {
+            console.error("No se pudo actualizar el tablero:", error);
+        }
+    }
+
+    document.getElementById("ultima-actualizacion").textContent = new Date().toLocaleTimeString();
+    setInterval(actualizarTablero, 60000);
+</script>
+{% endblock %}

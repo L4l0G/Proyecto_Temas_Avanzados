@@ -1,0 +1,11 @@
+# Traducciones propias del proyecto para el JavaScript del admin (contador de seleccion).
+# Despues de editar este archivo hay que regenerar el .mo:  python locale/compilar.py
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "%(sel)s of %(cnt)s selected"
+msgid_plural "%(sel)s of %(cnt)s selected"
+msgstr[0] "Selección: %(sel)s de %(cnt)s"
+msgstr[1] "Selección: %(sel)s de %(cnt)s"

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es">
+<head>
+    {% load static cache_busting %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Error del servidor - Sistema de Monitoreo</title>
+    <script>
+        (function () {
+            var tema = localStorage.getItem('theme') || 'auto';
+            document.documentElement.dataset.theme = tema;
+        })();
+    </script>
+    <link rel="stylesheet" href="{% static_v 'monitoreo/tablero.css' %}">
+</head>
+<body>
+    <div class="error-pagina">
+        <p class="error-codigo">500</p>
+        <h1>Algo salió mal de nuestro lado</h1>
+        <p class="subtitle">Ya quedó registrado. Intenta de nuevo en unos momentos.</p>
+        <a href="{% url 'tablero' %}" class="volver-link">&larr; Volver al tablero</a>
+    </div>
+</body>
+</html>
