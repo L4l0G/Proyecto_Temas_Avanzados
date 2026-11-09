@@ -1,5 +1,5 @@
 # Sistema de Monitoreo de Equipos
-
+  
 Aplicación web en Django para monitorear equipos, con un agente de Windows (`agente/`) que se instala en cada equipo monitoreado.
 
 ```
