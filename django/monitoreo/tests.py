@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest import mock
 
 from django.contrib.auth.models import Permission, User
 from django.test import TestCase
@@ -157,6 +158,292 @@ class ReportarEstadoViewTests(TestCase):
 
         self.equipo.refresh_from_db()
         self.assertEqual(self.equipo.direccion_ip, '192.168.1.50')
+
+    def test_reporte_con_ip_malformada_no_guarda_nada_a_medias(self):
+        # Antes el historial y las alertas se guardaban antes de revisar la IP.
+        ComandoRemoto.objects.create(equipo=self.equipo, proceso='brave.exe')
+
+        respuesta = self._reportar(cpu_porcentaje=95, direccion_ip='no-es-una-ip')
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(self.equipo.historial.count(), 0)
+        self.assertFalse(Alerta.objects.exists())
+        self.assertEqual(ComandoRemoto.objects.get().estado, ComandoRemoto.Estado.PENDIENTE)
+
+    def test_ram_que_no_es_numero_da_400_y_no_guarda_nada(self):
+        respuesta = self._reportar(ram_total_mb='mucha')
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(self.equipo.historial.count(), 0)
+
+    def test_datos_de_hardware_vacios_no_borran_los_anteriores(self):
+        self._reportar(procesador='AMD Ryzen 7 5700X', ram_total_mb=16384)
+
+        self._reportar(procesador='', ram_total_mb='')
+
+        self.equipo.refresh_from_db()
+        self.assertEqual(self.equipo.procesador, 'AMD Ryzen 7 5700X')
+        self.assertEqual(self.equipo.ram_total_mb, 16384)
+
+    def test_texto_de_solo_espacios_no_borra_el_dato_anterior(self):
+        self._reportar(procesador='AMD Ryzen 7 5700X')
+
+        respuesta = self._reportar(procesador='   ')
+
+        self.assertEqual(respuesta.status_code, 201)
+        self.equipo.refresh_from_db()
+        self.assertEqual(self.equipo.procesador, 'AMD Ryzen 7 5700X')
+
+    def _reportar_json(self, **overrides):
+        # El agente real manda JSON (requests.post(..., json=datos)), no form-data.
+        datos = {
+            'equipo': self.equipo.pk,
+            'token': 'token-valido',
+            'cpu_porcentaje': 10,
+            'memoria_porcentaje': 10,
+            'disco_porcentaje': 10,
+            'conectado': True,
+        }
+        datos.update(overrides)
+        return self.client.post(reverse('reportar_estado'), datos, content_type='application/json')
+
+    def test_reporte_en_json_guarda_todos_los_datos_de_hardware(self):
+        respuesta = self._reportar_json(
+            direccion_ip='10.0.0.7', numero_serie='ABC123', procesador='Intel Core i5',
+            sistema_operativo='Windows-11', ram_total_mb=8192, disco_total_gb=512,
+        )
+
+        self.assertEqual(respuesta.status_code, 201)
+        self.assertEqual(respuesta.json()['detener_procesos'], [])
+        self.equipo.refresh_from_db()
+        self.assertEqual(self.equipo.direccion_ip, '10.0.0.7')
+        self.assertEqual(self.equipo.numero_serie, 'ABC123')
+        self.assertEqual(self.equipo.procesador, 'Intel Core i5')
+        self.assertEqual(self.equipo.sistema_operativo, 'Windows-11')
+        self.assertEqual(self.equipo.ram_total_mb, 8192)
+        self.assertEqual(self.equipo.disco_total_gb, 512)
+
+    def test_hardware_null_o_vacio_en_json_no_borra_los_anteriores(self):
+        # El agente manda None si psutil falla y "" si WMI no responde.
+        self._reportar_json(direccion_ip='10.0.0.7', numero_serie='ABC123', ram_total_mb=8192, disco_total_gb=512)
+
+        respuesta = self._reportar_json(direccion_ip='', numero_serie='', ram_total_mb=None, disco_total_gb=None)
+
+        self.assertEqual(respuesta.status_code, 201)
+        self.equipo.refresh_from_db()
+        self.assertEqual(self.equipo.direccion_ip, '10.0.0.7')
+        self.assertEqual(self.equipo.numero_serie, 'ABC123')
+        self.assertEqual(self.equipo.ram_total_mb, 8192)
+        self.assertEqual(self.equipo.disco_total_gb, 512)
+
+    def test_ram_cero_en_json_no_borra_la_anterior(self):
+        # 0 cuenta como "sin dato", igual que antes del cambio.
+        self._reportar_json(ram_total_mb=8192)
+
+        respuesta = self._reportar_json(ram_total_mb=0)
+
+        self.assertEqual(respuesta.status_code, 201)
+        self.equipo.refresh_from_db()
+        self.assertEqual(self.equipo.ram_total_mb, 8192)
+
+    def test_ram_negativa_da_400_y_no_guarda_nada(self):
+        respuesta = self._reportar_json(ram_total_mb=-1)
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('ram_total_mb', respuesta.json())
+        self.assertEqual(self.equipo.historial.count(), 0)
+
+    def test_texto_de_hardware_demasiado_largo_da_400_y_no_guarda_nada(self):
+        # procesador es max_length=200; antes en Postgres esto tronaba con 500 después de guardar el historial.
+        respuesta = self._reportar_json(cpu_porcentaje=95, procesador='x' * 201)
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('procesador', respuesta.json())
+        self.assertEqual(self.equipo.historial.count(), 0)
+        self.assertFalse(Alerta.objects.exists())
+
+    def test_error_400_trae_los_errores_de_ambos_serializers(self):
+        respuesta = self._reportar_json(cpu_porcentaje='mucho', direccion_ip='no-es-una-ip')
+
+        self.assertEqual(respuesta.status_code, 400)
+        errores = respuesta.json()
+        self.assertIn('cpu_porcentaje', errores)
+        self.assertIn('direccion_ip', errores)
+
+    def test_reporte_invalido_no_toca_estado_ni_comandos_ni_alertas(self):
+        Equipo.objects.filter(pk=self.equipo.pk).update(estado=Equipo.Estado.MANTENIMIENTO)
+        ComandoRemoto.objects.create(equipo=self.equipo, proceso='brave.exe')
+        Alerta.objects.create(
+            equipo=self.equipo, tipo=Alerta.Tipo.SIN_RESPUESTA,
+            nivel=Alerta.Nivel.CRITICO, mensaje='No ha reportado.',
+        )
+
+        respuesta = self._reportar_json(cpu_porcentaje=95, ram_total_mb='mucha')
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertNotIn('detener_procesos', respuesta.json())
+        self.equipo.refresh_from_db()
+        self.assertEqual(self.equipo.estado, Equipo.Estado.MANTENIMIENTO)
+        self.assertEqual(ComandoRemoto.objects.get().estado, ComandoRemoto.Estado.PENDIENTE)
+        self.assertFalse(Alerta.objects.get(tipo=Alerta.Tipo.SIN_RESPUESTA).atendida)
+        self.assertFalse(Alerta.objects.filter(tipo=Alerta.Tipo.CPU_ALTO).exists())
+
+    def test_si_algo_falla_al_guardar_se_revierte_todo_el_reporte(self):
+        # Simula un error a mitad del guardado (ya creado el historial) para comprobar transaction.atomic().
+        ComandoRemoto.objects.create(equipo=self.equipo, proceso='brave.exe')
+
+        with mock.patch('monitoreo.views._crear_alerta', side_effect=RuntimeError('falla simulada')):
+            with self.assertRaises(RuntimeError):
+                self._reportar_json(cpu_porcentaje=95, procesador='Intel Core i5')
+
+        self.assertEqual(self.equipo.historial.count(), 0)
+        self.equipo.refresh_from_db()
+        self.assertEqual(self.equipo.procesador, '')
+        self.assertEqual(ComandoRemoto.objects.get().estado, ComandoRemoto.Estado.PENDIENTE)
+
+    def test_cada_metrica_alerta_justo_en_su_umbral_con_su_mensaje(self):
+        self._reportar(cpu_porcentaje=85, memoria_porcentaje=90, disco_porcentaje=85)
+
+        alertas = {a.tipo: a for a in Alerta.objects.all()}
+        self.assertEqual(
+            set(alertas), {Alerta.Tipo.CPU_ALTO, Alerta.Tipo.MEMORIA_ALTA, Alerta.Tipo.DISCO_LLENO},
+        )
+        self.assertTrue(all(a.nivel == Alerta.Nivel.ADVERTENCIA for a in alertas.values()))
+        self.assertEqual(alertas[Alerta.Tipo.CPU_ALTO].mensaje, 'Uso de CPU muy alto en "PC-01" (85%).')
+        self.assertEqual(alertas[Alerta.Tipo.MEMORIA_ALTA].mensaje, 'Uso de memoria muy alto en "PC-01" (90%).')
+        self.assertEqual(alertas[Alerta.Tipo.DISCO_LLENO].mensaje, 'Poco espacio en disco en "PC-01" (85% usado).')
+
+    def test_justo_debajo_del_umbral_no_alerta(self):
+        self._reportar(cpu_porcentaje=84.9, memoria_porcentaje=89.9, disco_porcentaje=84.9)
+
+        self.assertFalse(Alerta.objects.exists())
+
+    def test_reporte_desconectado_marca_inactivo_y_no_cierra_sin_respuesta(self):
+        Alerta.objects.create(
+            equipo=self.equipo, tipo=Alerta.Tipo.SIN_RESPUESTA,
+            nivel=Alerta.Nivel.CRITICO, mensaje='No ha reportado.',
+        )
+
+        respuesta = self._reportar_json(conectado=False)
+
+        self.assertEqual(respuesta.status_code, 201)
+        self.equipo.refresh_from_db()
+        self.assertEqual(self.equipo.estado, Equipo.Estado.INACTIVO)
+        self.assertFalse(Alerta.objects.get().atendida)
+
+
+class EquipoDetalleViewTests(TestCase):
+    def setUp(self):
+        self.usuario = User.objects.create_user('operador', password='clave-de-prueba-1')
+        self.client.force_login(self.usuario)
+        self.equipo = Equipo.objects.create(nombre="PC-01", estado=Equipo.Estado.ACTIVO)
+
+    def _crear_reporte(self, cpu, memoria, disco, hace=None):
+        historial = HistorialEstado.objects.create(
+            equipo=self.equipo, cpu_porcentaje=cpu, memoria_porcentaje=memoria, disco_porcentaje=disco,
+        )
+        if hace:
+            # update() evita auto_now_add, así se simula un reporte viejo.
+            HistorialEstado.objects.filter(pk=historial.pk).update(timestamp=timezone.now() - hace)
+        return historial
+
+    def _ver_detalle(self):
+        return self.client.get(reverse('equipo_detalle', args=[self.equipo.pk]))
+
+    def test_clases_de_metricas_usan_el_umbral_de_cada_una(self):
+        # 85 es "alto" para CPU pero solo "medio" para memoria (su umbral es 90).
+        self._crear_reporte(cpu=85, memoria=85, disco=59)
+
+        respuesta = self._ver_detalle()
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.context['metricas'], {
+            'cpu_clase': 'metric-alto',
+            'memoria_clase': 'metric-medio',
+            'disco_clase': 'metric-bajo',
+        })
+
+    def test_consejos_solo_para_las_metricas_altas_y_en_orden(self):
+        self._crear_reporte(cpu=90, memoria=89, disco=85)
+
+        consejos = self._ver_detalle().context['consejos']
+
+        self.assertEqual(len(consejos), 2)
+        self.assertIn('CPU', consejos[0])
+        self.assertIn('disco', consejos[1])
+
+    def test_sin_metricas_altas_no_hay_consejos(self):
+        self._crear_reporte(cpu=10, memoria=10, disco=10)
+
+        respuesta = self._ver_detalle()
+
+        self.assertEqual(respuesta.context['consejos'], [])
+        self.assertNotContains(respuesta, 'Posibles causas y qué hacer')
+
+    def test_reporte_viejo_solo_muestra_el_consejo_de_conexion(self):
+        # Aunque el último reporte tenga todo alto, si es viejo lo relevante es que el equipo no reporta.
+        self._crear_reporte(cpu=99, memoria=99, disco=99, hace=timedelta(minutes=10))
+
+        respuesta = self._ver_detalle()
+
+        consejos = respuesta.context['consejos']
+        self.assertEqual(len(consejos), 1)
+        self.assertIn('no ha presentado reporte', consejos[0])
+        self.equipo.refresh_from_db()
+        self.assertEqual(self.equipo.estado, Equipo.Estado.INACTIVO)
+        self.assertTrue(Alerta.objects.filter(equipo=self.equipo, tipo=Alerta.Tipo.SIN_RESPUESTA).exists())
+
+    def test_equipo_en_mantenimiento_sin_reportes_conserva_su_estado_y_no_alerta(self):
+        Equipo.objects.filter(pk=self.equipo.pk).update(estado=Equipo.Estado.MANTENIMIENTO)
+
+        respuesta = self._ver_detalle()
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIsNone(respuesta.context['metricas'])
+        self.assertEqual(respuesta.context['consejos'], [])
+        self.assertContains(respuesta, 'En mantenimiento')
+        self.assertContains(respuesta, 'Sin conexión')
+        self.equipo.refresh_from_db()
+        self.assertEqual(self.equipo.estado, Equipo.Estado.MANTENIMIENTO)
+        self.assertFalse(Alerta.objects.exists())
+
+    def test_equipo_activo_sin_reportes_pasa_a_inactivo_y_alerta(self):
+        respuesta = self._ver_detalle()
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'Inactivo')
+        self.equipo.refresh_from_db()
+        self.assertEqual(self.equipo.estado, Equipo.Estado.INACTIVO)
+        self.assertEqual(Alerta.objects.filter(tipo=Alerta.Tipo.SIN_RESPUESTA).count(), 1)
+
+    def test_reporte_reciente_se_muestra_activo_y_conectado(self):
+        self._crear_reporte(cpu=10, memoria=10, disco=10)
+
+        respuesta = self._ver_detalle()
+
+        self.assertContains(respuesta, 'badge badge-ok">Activo')
+        self.assertContains(respuesta, 'badge badge-ok">Conectado')
+        self.assertFalse(Alerta.objects.exists())
+
+    def test_muestra_el_formulario_para_detener_programas(self):
+        respuesta = self._ver_detalle()
+
+        self.assertContains(respuesta, 'Detener un programa en esta PC')
+        self.assertContains(respuesta, 'value="brave.exe"')
+
+    def test_los_mensajes_se_muestran_con_la_clase_de_su_nivel(self):
+        permisos = Permission.objects.filter(content_type__app_label='monitoreo', codename='change_equipo')
+        self.usuario.user_permissions.set(permisos)
+
+        exito = self.client.post(
+            reverse('equipo_detener_proceso', args=[self.equipo.pk]), {'proceso': 'brave.exe'}, follow=True,
+        )
+        error = self.client.post(
+            reverse('equipo_detener_proceso', args=[self.equipo.pk]), {'proceso': 'explorer.exe'}, follow=True,
+        )
+
+        self.assertContains(exito, 'class="mensaje mensaje-success"')
+        self.assertContains(error, 'class="mensaje mensaje-error"')
 
 
 class AutorizacionEquipoViewsTests(TestCase):

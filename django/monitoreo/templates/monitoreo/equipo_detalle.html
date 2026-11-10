@@ -143,7 +143,6 @@
             {% endif %}
         </div>
 
-        {% if programas_detenibles %}
         <div class="detalle-card detener-card">
             <p class="consejos-titulo detener-titulo">Detener un programa en esta PC</p>
             <form method="post" action="{% url 'equipo_detener_proceso' equipo.pk %}" class="detener-form" onsubmit="return confirm('¿Desea detener ' + this.proceso.options[this.proceso.selectedIndex].text + ' en ' + '{{ equipo.nombre|escapejs }}' + '?\n\nSe aplicará en el próximo reporte del equipo (máximo 1 minuto).');">
@@ -158,7 +157,6 @@
                 </button>
             </form>
         </div>
-        {% endif %}
     </div>
 {% endblock %}
 

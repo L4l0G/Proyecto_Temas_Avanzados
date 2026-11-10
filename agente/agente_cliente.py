@@ -217,30 +217,30 @@ def crear_tarea_programada(intervalo_minutos=INTERVALO_MINUTOS_POR_DEFECTO):
 
 
 def _ejecutar_schtasks(*argumentos):
+    # Devuelve (éxito, detalle del error) para que quien llama decida si el fallo se registra.
     try:
-        return subprocess.run(
+        resultado = subprocess.run(
             ["schtasks", *argumentos],
             capture_output=True, text=True, creationflags=CREATE_NO_WINDOW, timeout=30,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        registrar_log(f"schtasks {' '.join(argumentos)} falló: {error}")
-        return None
+        detalle = f"schtasks {' '.join(argumentos)} falló: {error}"
+        registrar_log(detalle)
+        return False, detalle
+    return resultado.returncode == 0, resultado.stderr.strip()
 
 
 def existe_tarea_programada():
-    resultado = _ejecutar_schtasks("/query", "/tn", NOMBRE_TAREA)
-    return resultado is not None and resultado.returncode == 0
+    return _ejecutar_schtasks("/query", "/tn", NOMBRE_TAREA)[0]
 
 
 def eliminar_tarea_programada():
     # Primero se detiene la ejecución en curso (si la hay) y luego se borra la tarea.
     _ejecutar_schtasks("/end", "/tn", NOMBRE_TAREA)
-    resultado = _ejecutar_schtasks("/delete", "/tn", NOMBRE_TAREA, "/f")
-    if resultado is None or resultado.returncode != 0:
-        if resultado is not None:
-            registrar_log(f"No se pudo eliminar la tarea programada: {resultado.stderr.strip()}")
-        return False
-    return True
+    eliminada, detalle = _ejecutar_schtasks("/delete", "/tn", NOMBRE_TAREA, "/f")
+    if not eliminada:
+        registrar_log(f"No se pudo eliminar la tarea programada: {detalle}")
+    return eliminada
 
 
 def detener_agentes_en_ejecucion():
@@ -254,12 +254,10 @@ def detener_agentes_en_ejecucion():
     except psutil.Error:
         pass
 
-    encontrados = []
-    for proceso in psutil.process_iter(["name"]):
-        if proceso.pid in propios:
-            continue
-        if (proceso.info["name"] or "").lower() == NOMBRE_EXE_AGENTE.lower():
-            encontrados.append(proceso)
+    encontrados = [
+        proceso for proceso in psutil.process_iter(["name"])
+        if proceso.pid not in propios and (proceso.info["name"] or "").lower() == NOMBRE_EXE_AGENTE.lower()
+    ]
 
     for proceso in encontrados:
         try:
@@ -364,8 +362,10 @@ def enviar_reporte(config):
         procesos_a_detener = respuesta.json().get("detener_procesos") or []
         if procesos_a_detener:
             detenidos = detener_procesos(procesos_a_detener)
-            if detenidos:
-                registrar_log(f"Procesos detenidos por orden remota: {', '.join(detenidos)}")
+            registrar_log(
+                f"Orden remota de detener {', '.join(procesos_a_detener)}; "
+                f"detenidos: {', '.join(detenidos) or 'ninguno estaba abierto'}"
+            )
 
         return True
     except requests.exceptions.RequestException as error:
@@ -449,13 +449,16 @@ def reinstalar_tarea():
         )
 
 
-def main():
-    if len(sys.argv) > 1 and sys.argv[1] == "--desinstalar":
-        desinstalar()
-        return
+ACCIONES_ESPECIALES = {
+    "--desinstalar": desinstalar,
+    "--reinstalar-tarea": reinstalar_tarea,
+}
 
-    if len(sys.argv) > 1 and sys.argv[1] == "--reinstalar-tarea":
-        reinstalar_tarea()
+
+def main():
+    accion = ACCIONES_ESPECIALES.get(sys.argv[1] if len(sys.argv) > 1 else None)
+    if accion:
+        accion()
         return
 
     try:
@@ -476,9 +479,10 @@ def main():
         from tkinter import messagebox
 
         if exito:
-            mensaje = "El reporte se envió correctamente."
+            mensaje, mostrar = "El reporte se envió correctamente.", messagebox.showinfo
         else:
             mensaje = "No se pudo enviar el reporte.\nRevisa agente.log y la conexión al servidor."
+            mostrar = messagebox.showwarning
         if recien_configurado:
             mensaje = "Configuración guardada. " + mensaje
         if tarea_creada:
@@ -490,10 +494,7 @@ def main():
                 "\"Ejecutar como administrador\" (se necesita para programar la tarea "
                 "como SYSTEM), o configúrala manualmente en el Programador de tareas de Windows."
             )
-        if exito:
-            messagebox.showinfo(NOMBRE_AGENTE, mensaje)
-        else:
-            messagebox.showwarning(NOMBRE_AGENTE, mensaje)
+        mostrar(NOMBRE_AGENTE, mensaje)
 
 
 if __name__ == "__main__":

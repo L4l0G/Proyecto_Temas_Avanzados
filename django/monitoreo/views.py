@@ -1,10 +1,10 @@
 import secrets
+from collections import namedtuple
 from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
-from django.core.exceptions import ValidationError
-from django.core.validators import validate_ipv46_address
+from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -13,18 +13,50 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from .models import Alerta, ComandoRemoto, Equipo, PROGRAMAS_DETENIBLES
-from .serializers import EquipoSerializer, HistorialEstadoSerializer
+from .serializers import EquipoSerializer, EspecificacionesSerializer, HistorialEstadoSerializer
 
 # Si un equipo no manda un reporte en ese lapso de tiempo, se muestra como desconectado/inactivo aunque su último reporte haya dicho lo contrario.
 UMBRAL_SIN_REPORTE = timedelta(minutes=3)
 
-# Umbrales de "alto" por métrica. Memoria queda más alto que CPU/disco porque en equipos con poca RAM (ej. 4GB), y es normal que el uso
-# ronde 80-85% con cualquier actividad cotidiana (no es un foco rojo real
-# hasta pasar de 90%).
 UMBRAL_MEDIO = 60
-UMBRAL_ALTO_CPU = 85
-UMBRAL_ALTO_MEMORIA = 90
-UMBRAL_ALTO_DISCO = 85
+
+# Cada métrica que se vigila, con su umbral de "alto", la alerta que genera y el consejo que se muestra en el detalle.
+# Memoria queda más alto que CPU/disco porque en equipos con poca RAM (ej. 4GB), y es normal que el uso
+# ronde 80-85% con cualquier actividad cotidiana (no es un foco rojo real hasta pasar de 90%).
+Metrica = namedtuple('Metrica', 'nombre umbral_alto tipo_alerta mensaje_alerta consejo')
+METRICAS = [
+    Metrica(
+        'cpu', 85, Alerta.Tipo.CPU_ALTO,
+        'Uso de CPU muy alto en "{equipo}" ({valor:.0f}%).',
+        'El uso de CPU es muy alto. Se recomienda cerrar programas o ventanas que no se estén usando; '
+        'si no mejora, reinicia el equipo.',
+    ),
+    Metrica(
+        'memoria', 90, Alerta.Tipo.MEMORIA_ALTA,
+        'Uso de memoria muy alto en "{equipo}" ({valor:.0f}%).',
+        'El uso de memoria es muy alto. Se recomienda cerrar aplicaciones o pestañas del navegador que no '
+        'se estén usando; si persiste, reinicia el equipo.',
+    ),
+    Metrica(
+        'disco', 85, Alerta.Tipo.DISCO_LLENO,
+        'Poco espacio en disco en "{equipo}" ({valor:.0f}% usado).',
+        'Queda poco espacio libre en disco. Elimina archivos temporales o descargas '
+        'innecesarias para liberar espacio.',
+    ),
+]
+
+
+def _valor(reporte, metrica):
+    return getattr(reporte, f'{metrica.nombre}_porcentaje')
+
+
+def _tiene_valor(valor):
+    # Un texto con solo espacios cuenta como vacío (DRF lo recortaría a "" y borraría el dato guardado).
+    return bool(valor.strip() if isinstance(valor, str) else valor)
+
+
+def _metricas_altas(reporte):
+    return [metrica for metrica in METRICAS if _valor(reporte, metrica) >= metrica.umbral_alto]
 
 
 def _calcular_estado_visible(equipo, ultimo_reporte):
@@ -33,27 +65,24 @@ def _calcular_estado_visible(equipo, ultimo_reporte):
         or timezone.now() - ultimo_reporte.timestamp > UMBRAL_SIN_REPORTE
     )
 
-    if equipo.estado == Equipo.Estado.MANTENIMIENTO:
-        estado_visible = equipo.estado
-    elif sin_reporte_reciente:
-        estado_visible = Equipo.Estado.INACTIVO
+    # Un equipo en mantenimiento conserva su estado aunque no reporte.
+    if sin_reporte_reciente and equipo.estado != Equipo.Estado.MANTENIMIENTO:
         _crear_alerta(
             equipo, Alerta.Tipo.SIN_RESPUESTA, Alerta.Nivel.CRITICO,
             f'"{equipo.nombre}" no ha reportado en más de {UMBRAL_SIN_REPORTE.seconds // 60} minutos.',
         )
-    else:
-        estado_visible = equipo.estado
+        # Deja el cambio guardado (no solo mostrado), para que el admin y cualquier filtro por estado reflejen lo
+        # mismo que ve el personal en el tablero. Se filtra por el estado que se leyó: si justo llegó un reporte y
+        # el equipo pasó a activo, no se le pisa con inactivo.
+        if equipo.estado != Equipo.Estado.INACTIVO:
+            Equipo.objects.filter(pk=equipo.pk, estado=equipo.estado).update(estado=Equipo.Estado.INACTIVO)
+            equipo.estado = Equipo.Estado.INACTIVO
 
-    equipo.estado_visible = estado_visible
-    equipo.estado_visible_display = Equipo.Estado(estado_visible).label
+    equipo.estado_visible = equipo.estado
+    equipo.estado_visible_display = equipo.get_estado_display()
     equipo.conectado_visible = bool(
         ultimo_reporte and ultimo_reporte.conectado and not sin_reporte_reciente
     )
-
-    # Deja el cambio guardado (no solo mostrado), para que el admin y cualquier filtro por estado reflejen lo mismo que ve el personal en el tablero.
-    if estado_visible != equipo.estado:
-        equipo.estado = estado_visible
-        equipo.save(update_fields=['estado'])
 
 
 @login_required
@@ -97,32 +126,12 @@ def _crear_alerta(equipo, tipo, nivel, mensaje):
 
 
 def _generar_consejos(equipo, ultimo_reporte):
-    consejos = []
-
     if not equipo.conectado_visible:
-        consejos.append(
+        return [
             'Este equipo no ha presentado reporte recientemente. Verifica que esté encendido, '
             'conectado a la red, y que el programa de monitoreo se encuentre corriendo.'
-        )
-        return consejos  
-
-    if ultimo_reporte.cpu_porcentaje >= UMBRAL_ALTO_CPU:
-        consejos.append(
-            'El uso de CPU es muy alto. Se recomienda cerrar programas o ventanas que no se estén usando; '
-            'si no mejora, reinicia el equipo.'
-        )
-    if ultimo_reporte.memoria_porcentaje >= UMBRAL_ALTO_MEMORIA:
-        consejos.append(
-            'El uso de memoria es muy alto. Se recomienda cerrar aplicaciones o pestañas del navegador que no '
-            'se estén usando; si persiste, reinicia el equipo.'
-        )
-    if ultimo_reporte.disco_porcentaje >= UMBRAL_ALTO_DISCO:
-        consejos.append(
-            'Queda poco espacio libre en disco. Elimina archivos temporales o descargas '
-            'innecesarias para liberar espacio.'
-        )
-
-    return consejos
+        ]
+    return [metrica.consejo for metrica in _metricas_altas(ultimo_reporte)]
 
 
 @login_required
@@ -130,13 +139,12 @@ def equipo_detalle(request, pk):
     equipo = get_object_or_404(Equipo, pk=pk)
     ultimo_reporte = equipo.historial.order_by('-timestamp').first()  # type: ignore[attr-defined]
     _calcular_estado_visible(equipo, ultimo_reporte)
-    consejos = _generar_consejos(equipo, ultimo_reporte) if ultimo_reporte else []
-    metricas = None
+    consejos, metricas = [], None
     if ultimo_reporte:
+        consejos = _generar_consejos(equipo, ultimo_reporte)
         metricas = {
-            'cpu_clase': _clase_metrica(ultimo_reporte.cpu_porcentaje, UMBRAL_ALTO_CPU),
-            'memoria_clase': _clase_metrica(ultimo_reporte.memoria_porcentaje, UMBRAL_ALTO_MEMORIA),
-            'disco_clase': _clase_metrica(ultimo_reporte.disco_porcentaje, UMBRAL_ALTO_DISCO),
+            f'{metrica.nombre}_clase': _clase_metrica(_valor(ultimo_reporte, metrica), metrica.umbral_alto)
+            for metrica in METRICAS
         }
     return render(request, 'monitoreo/equipo_detalle.html', {
         'equipo': equipo,
@@ -278,64 +286,38 @@ def reportar_estado(request):
     if not equipo.token or not secrets.compare_digest(token, equipo.token):
         return Response({'detail': 'Token inválido para este equipo.'}, status=status.HTTP_403_FORBIDDEN)
 
+    # Primero se valida todo el reporte y solo después se guarda. Antes la IP se revisaba al final: si venía mal
+    # escrita, el historial y las alertas ya se habían guardado y quedaban datos a medias.
     serializer = HistorialEstadoSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    # Los datos de hardware que llegan vacíos (ej. WMI no respondió) no borran los que ya se tenían.
+    especificaciones = EspecificacionesSerializer(
+        equipo, partial=True,
+        data={campo: request.data[campo] for campo in EspecificacionesSerializer.Meta.fields if _tiene_valor(request.data.get(campo))},
+    )
+    # Se validan los dos (no "and") para responder con todos los errores a la vez.
+    validos = [serializer.is_valid(), especificaciones.is_valid()]
+    if not all(validos):
+        return Response({**serializer.errors, **especificaciones.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-    historial = serializer.save()
+    with transaction.atomic():
+        historial = serializer.save()
 
-    # Si el equipo vuelve a reportar, la falla "sin respuesta" ya se resolvio sola: se cierra la alerta para que
-    # no siga apareciendo en el filtro del tablero ni en las notificaciones.
-    if historial.conectado:
-        Alerta.objects.filter(
-            equipo=equipo, tipo=Alerta.Tipo.SIN_RESPUESTA, atendida=False,
-        ).update(atendida=True, leida=True)
+        # Si el equipo vuelve a reportar, la falla "sin respuesta" ya se resolvio sola: se cierra la alerta para que
+        # no siga apareciendo en el filtro del tablero ni en las notificaciones.
+        if historial.conectado:
+            Alerta.objects.filter(
+                equipo=equipo, tipo=Alerta.Tipo.SIN_RESPUESTA, atendida=False,
+            ).update(atendida=True, leida=True)
 
-    if historial.cpu_porcentaje >= UMBRAL_ALTO_CPU:
-        _crear_alerta(
-            equipo, Alerta.Tipo.CPU_ALTO, Alerta.Nivel.ADVERTENCIA,
-            f'Uso de CPU muy alto en "{equipo.nombre}" ({historial.cpu_porcentaje:.0f}%).',
-        )
-    if historial.memoria_porcentaje >= UMBRAL_ALTO_MEMORIA:
-        _crear_alerta(
-            equipo, Alerta.Tipo.MEMORIA_ALTA, Alerta.Nivel.ADVERTENCIA,
-            f'Uso de memoria muy alto en "{equipo.nombre}" ({historial.memoria_porcentaje:.0f}%).',
-        )
-    if historial.disco_porcentaje >= UMBRAL_ALTO_DISCO:
-        _crear_alerta(
-            equipo, Alerta.Tipo.DISCO_LLENO, Alerta.Nivel.ADVERTENCIA,
-            f'Poco espacio en disco en "{equipo.nombre}" ({historial.disco_porcentaje:.0f}% usado).',
-        )
+        for metrica in _metricas_altas(historial):
+            _crear_alerta(
+                equipo, metrica.tipo_alerta, Alerta.Nivel.ADVERTENCIA,
+                metrica.mensaje_alerta.format(equipo=equipo.nombre, valor=_valor(historial, metrica)),
+            )
 
-    equipo.estado = Equipo.Estado.ACTIVO if historial.conectado else Equipo.Estado.INACTIVO  # type: ignore[attr-defined]
+        especificaciones.save(estado=Equipo.Estado.ACTIVO if historial.conectado else Equipo.Estado.INACTIVO)
 
-    direccion_ip = request.data.get('direccion_ip')
-    if direccion_ip:
-        try:
-            validate_ipv46_address(direccion_ip)
-        except ValidationError:
-            return Response({'detail': 'direccion_ip invalida.'}, status=status.HTTP_400_BAD_REQUEST)
-        equipo.direccion_ip = direccion_ip
-    numero_serie = request.data.get('numero_serie')
-    if numero_serie:
-        equipo.numero_serie = numero_serie
-    procesador = request.data.get('procesador')
-    if procesador:
-        equipo.procesador = procesador
-    sistema_operativo = request.data.get('sistema_operativo')
-    if sistema_operativo:
-        equipo.sistema_operativo = sistema_operativo
-    ram_total_mb = request.data.get('ram_total_mb')
-    if ram_total_mb:
-        equipo.ram_total_mb = ram_total_mb
-    disco_total_gb = request.data.get('disco_total_gb')
-    if disco_total_gb:
-        equipo.disco_total_gb = disco_total_gb
-
-    equipo.save()
-
-    comandos_pendientes = list(equipo.comandos.filter(estado=ComandoRemoto.Estado.PENDIENTE))
-    if comandos_pendientes:
+        comandos_pendientes = list(equipo.comandos.filter(estado=ComandoRemoto.Estado.PENDIENTE))
         ComandoRemoto.objects.filter(
             id__in=[c.id for c in comandos_pendientes]
         ).update(estado=ComandoRemoto.Estado.ENVIADO, enviado=timezone.now())

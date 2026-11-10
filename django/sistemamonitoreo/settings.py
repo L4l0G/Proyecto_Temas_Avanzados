@@ -211,10 +211,25 @@ LOGOUT_REDIRECT_URL = 'login'
 
 
 # Email
-# https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
+# El sistema no envía correos: las contraseñas olvidadas las restablece un administrador desde el panel. Por eso
+# solo se publican las rutas de login/logout (ver urls.py) y no se configura ningún servidor de correo.
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+
+# Registro de errores
+# Sin esto, con DEBUG=False Django solo manda los errores 500 por correo a ADMINS (vacío) y no queda rastro.
+# Se escriben en la consola, que es lo que Render guarda en la pestaña "Logs".
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {'format': '{asctime} {levelname} {name}: {message}', 'style': '{'},
+    },
+    'handlers': {
+        'consola': {'class': 'logging.StreamHandler', 'formatter': 'simple'},
+    },
+    'root': {
+        'handlers': ['consola'],
+        'level': 'WARNING',
     },
 }

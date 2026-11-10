@@ -18,7 +18,7 @@ Se hace una sola vez, al clonar el repositorio. Requiere Python 3.14 y Git.
 git clone https://github.com/L4l0G/Proyecto_Temas_Avanzados.git
 cd Proyecto_Temas_Avanzados
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r django\requirements.txt pyinstaller
+.venv\Scripts\python.exe -m pip install -r django\requirements.txt -r agente\requirements.txt
 ```
 
 En VS Code, selecciona el intérprete del entorno: **Ctrl+Shift+P → Python: Select Interpreter → `.venv`**.
@@ -82,7 +82,7 @@ Los ejecutables quedan en `agente\dist\`, que no se sube al repositorio.
 
 - **Nunca subas** `.env`, contraseñas ni cadenas de conexión. Si necesitas compartir una, hazlo por un medio privado.
 - Si cambias un modelo, crea la migración (`manage.py makemigrations`) y súbela junto con el cambio.
-- Si agregas una dependencia, añádela a `django/requirements.txt`.
+- Si agregas una dependencia, añádela a `django/requirements.txt` (servidor) o a `agente/requirements.txt` (agente).
 - Si agregas una variable de entorno nueva, añádela también a `django/.env.example` (sin el valor real).
 
 ## Despliegue
