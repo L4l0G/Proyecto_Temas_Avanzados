@@ -5,6 +5,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.db import transaction
+from django.db.models import OuterRef, Subquery
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -12,11 +13,15 @@ from django.views.decorators.http import require_GET, require_POST
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Alerta, ComandoRemoto, Equipo, PROGRAMAS_DETENIBLES
+from .models import Alerta, ComandoRemoto, Equipo, HistorialEstado, PROGRAMAS_DETENIBLES
 from .serializers import EquipoSerializer, EspecificacionesSerializer, HistorialEstadoSerializer
 
 # Si un equipo no manda un reporte en ese lapso de tiempo, se muestra como desconectado/inactivo aunque su último reporte haya dicho lo contrario.
 UMBRAL_SIN_REPORTE = timedelta(minutes=3)
+
+# Cuánto tiempo se guarda el historial de reportes. Cada equipo agrega 1,440 registros al día; los más viejos
+# se borran solos al recibir cada reporte (Render en el plan gratis no permite tareas programadas).
+RETENCION_HISTORIAL = timedelta(days=30)
 
 UMBRAL_MEDIO = 60
 
@@ -59,18 +64,34 @@ def _metricas_altas(reporte):
     return [metrica for metrica in METRICAS if _valor(reporte, metrica) >= metrica.umbral_alto]
 
 
-def _calcular_estado_visible(equipo, ultimo_reporte):
+def _alerta_sin_respuesta_pendiente(ultimo_timestamp, ultima_alerta_sin_respuesta):
+    # Se crea una sola alerta "sin respuesta" por cada desconexión: si ya hay una posterior al último reporte
+    # (aunque alguien ya la haya atendido), no se crea otra. Antes, al atenderla, reaparecía en la siguiente
+    # recarga del tablero mientras el equipo siguiera apagado.
+    if ultima_alerta_sin_respuesta is None:
+        return True
+    return ultimo_timestamp is not None and ultima_alerta_sin_respuesta < ultimo_timestamp
+
+
+def _alertas_sin_respuesta(equipo):
+    return Alerta.objects.filter(equipo=equipo, tipo=Alerta.Tipo.SIN_RESPUESTA).order_by('-timestamp')
+
+
+def _calcular_estado_visible(equipo, ultimo_timestamp, ultimo_conectado, ultima_alerta_sin_respuesta):
+    # Recibe solo la fecha y la conexión del último reporte (no el reporte completo), para que el tablero
+    # pueda obtenerlas de todos los equipos en una sola consulta.
     sin_reporte_reciente = (
-        ultimo_reporte is None
-        or timezone.now() - ultimo_reporte.timestamp > UMBRAL_SIN_REPORTE
+        ultimo_timestamp is None
+        or timezone.now() - ultimo_timestamp > UMBRAL_SIN_REPORTE
     )
 
     # Un equipo en mantenimiento conserva su estado aunque no reporte.
     if sin_reporte_reciente and equipo.estado != Equipo.Estado.MANTENIMIENTO:
-        _crear_alerta(
-            equipo, Alerta.Tipo.SIN_RESPUESTA, Alerta.Nivel.CRITICO,
-            f'"{equipo.nombre}" no ha reportado en más de {UMBRAL_SIN_REPORTE.seconds // 60} minutos.',
-        )
+        if _alerta_sin_respuesta_pendiente(ultimo_timestamp, ultima_alerta_sin_respuesta):
+            _crear_alerta(
+                equipo, Alerta.Tipo.SIN_RESPUESTA, Alerta.Nivel.CRITICO,
+                f'"{equipo.nombre}" no ha reportado en más de {UMBRAL_SIN_REPORTE.seconds // 60} minutos.',
+            )
         # Deja el cambio guardado (no solo mostrado), para que el admin y cualquier filtro por estado reflejen lo
         # mismo que ve el personal en el tablero. Se filtra por el estado que se leyó: si justo llegó un reporte y
         # el equipo pasó a activo, no se le pisa con inactivo.
@@ -80,23 +101,28 @@ def _calcular_estado_visible(equipo, ultimo_reporte):
 
     equipo.estado_visible = equipo.estado
     equipo.estado_visible_display = equipo.get_estado_display()
-    equipo.conectado_visible = bool(
-        ultimo_reporte and ultimo_reporte.conectado and not sin_reporte_reciente
-    )
+    equipo.conectado_visible = bool(ultimo_conectado and not sin_reporte_reciente)
 
 
 @login_required
 def tablero(request):
-    equipos = Equipo.objects.all()
+    # Antes se pedía el último reporte de cada equipo dentro del bucle (una consulta por equipo).
+    # Ahora la base calcula la fecha y la conexión del último reporte de todos en la misma consulta de equipos.
+    ultimo_reporte = HistorialEstado.objects.filter(equipo=OuterRef('pk')).order_by('-timestamp')
+    equipos = Equipo.objects.annotate(
+        ultimo_timestamp=Subquery(ultimo_reporte.values('timestamp')[:1]),
+        ultimo_conectado=Subquery(ultimo_reporte.values('conectado')[:1]),
+        ultima_alerta_sin_respuesta=Subquery(_alertas_sin_respuesta(OuterRef('pk')).values('timestamp')[:1]),
+    )
 
     tipos_falla_por_equipo = {}
     for equipo_id, tipo in Alerta.objects.filter(atendida=False).values_list('equipo_id', 'tipo'):
         tipos_falla_por_equipo.setdefault(equipo_id, set()).add(tipo)
 
     for equipo in equipos:
-        ultimo_reporte = equipo.historial.order_by('-timestamp').first()
-        equipo.ultimo_reporte = ultimo_reporte  # type: ignore[attr-defined]
-        _calcular_estado_visible(equipo, ultimo_reporte)
+        _calcular_estado_visible(
+            equipo, equipo.ultimo_timestamp, equipo.ultimo_conectado, equipo.ultima_alerta_sin_respuesta,
+        )
         equipo.tipos_falla = ' '.join(sorted(tipos_falla_por_equipo.get(equipo.pk, [])))  # type: ignore[attr-defined]
 
     ubicaciones = sorted({equipo.ubicacion for equipo in equipos if equipo.ubicacion})
@@ -138,7 +164,12 @@ def _generar_consejos(equipo, ultimo_reporte):
 def equipo_detalle(request, pk):
     equipo = get_object_or_404(Equipo, pk=pk)
     ultimo_reporte = equipo.historial.order_by('-timestamp').first()  # type: ignore[attr-defined]
-    _calcular_estado_visible(equipo, ultimo_reporte)
+    _calcular_estado_visible(
+        equipo,
+        ultimo_reporte.timestamp if ultimo_reporte else None,
+        ultimo_reporte.conectado if ultimo_reporte else False,
+        _alertas_sin_respuesta(equipo).values_list('timestamp', flat=True).first(),
+    )
     consejos, metricas = [], None
     if ultimo_reporte:
         consejos = _generar_consejos(equipo, ultimo_reporte)
@@ -221,8 +252,7 @@ def equipo_desemparejar(request, pk):
 def alerta_atender(request, pk):
     alerta = get_object_or_404(Alerta, pk=pk)
     alerta.atendida = True
-    alerta.leida = True
-    alerta.save(update_fields=['atendida', 'leida'])
+    alerta.save(update_fields=['atendida'])
     messages.success(request, 'Alerta marcada como atendida.')
     return redirect('tablero')
 
@@ -230,7 +260,7 @@ def alerta_atender(request, pk):
 @login_required
 @require_GET
 def alertas_no_leidas(request):
-    no_leidas = Alerta.objects.filter(leida=False).select_related('equipo').order_by('-timestamp')
+    no_leidas = Alerta.no_leidas_por(request.user).select_related('equipo').order_by('-timestamp')
     return JsonResponse({
         'total': no_leidas.count(),
         'alertas': [
@@ -248,7 +278,7 @@ def alertas_no_leidas(request):
 @login_required
 @require_POST
 def alertas_marcar_leidas(request):
-    Alerta.objects.filter(leida=False).update(leida=True)
+    request.user.alertas_leidas.add(*Alerta.no_leidas_por(request.user))
     return JsonResponse({'ok': True})
 
 
@@ -301,13 +331,14 @@ def reportar_estado(request):
 
     with transaction.atomic():
         historial = serializer.save()
+        HistorialEstado.objects.filter(equipo=equipo, timestamp__lt=timezone.now() - RETENCION_HISTORIAL).delete()
 
         # Si el equipo vuelve a reportar, la falla "sin respuesta" ya se resolvio sola: se cierra la alerta para que
         # no siga apareciendo en el filtro del tablero ni en las notificaciones.
         if historial.conectado:
             Alerta.objects.filter(
                 equipo=equipo, tipo=Alerta.Tipo.SIN_RESPUESTA, atendida=False,
-            ).update(atendida=True, leida=True)
+            ).update(atendida=True)
 
         for metrica in _metricas_altas(historial):
             _crear_alerta(

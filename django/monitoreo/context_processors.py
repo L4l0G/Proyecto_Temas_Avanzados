@@ -7,7 +7,7 @@ def alertas_no_leidas(request):
     if not request.user.is_authenticated:
         return {}
     return {
-        'alertas_no_leidas_count': Alerta.objects.filter(leida=False).count(),
+        'alertas_no_leidas_count': Alerta.no_leidas_por(request.user).count(),
         'alertas_sin_atender_count': Alerta.objects.filter(atendida=False).count(),
         'alertas_pendientes': Alerta.objects.filter(atendida=False).select_related('equipo')[:10],
     }

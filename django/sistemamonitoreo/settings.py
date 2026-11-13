@@ -130,8 +130,8 @@ WSGI_APPLICATION = 'sistemamonitoreo.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-# En produccion la base de datos esta en Neon: su cadena de conexion (que ya
-# incluye sslmode=require) se carga en Render como DATABASE_URL.
+# En produccion la base de datos esta en Supabase: su cadena de conexion (Session pooler, con
+# sslmode=require) se carga en Render como DATABASE_URL.
 # En desarrollo no existe, asi que se usan las variables DB_* sueltas de
 # siempre, sin cambiar nada del flujo local.
 _database_url = os.environ.get('DATABASE_URL')

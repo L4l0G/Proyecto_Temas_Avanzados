@@ -1,6 +1,7 @@
 import secrets
 import string
 
+from django.conf import settings
 from django.db import models
 
 
@@ -68,6 +69,9 @@ class HistorialEstado(models.Model):
 
     class Meta:
         ordering = ["-timestamp"]
+        # El tablero y el detalle siempre buscan el reporte más reciente de un equipo. Sin este índice, la
+        # base tenía que ordenar todo el historial del equipo en cada consulta (crece 1,440 filas al día).
+        indexes = [models.Index(fields=["equipo", "-timestamp"], name="historial_equipo_ts_idx")]
 
     def __str__(self):
         return f"{self.equipo.nombre} @ {self.timestamp:%Y-%m-%d %H:%M}"
@@ -113,7 +117,9 @@ class Alerta(models.Model):
     nivel = models.CharField(max_length=20, choices=Nivel.choices, default=Nivel.INFO)
     tipo = models.CharField(max_length=20, choices=Tipo.choices)
     atendida = models.BooleanField(default=False)
-    leida = models.BooleanField(default=False)
+    # Cada usuario lleva su propio registro de lectura: abrir la campana marca las alertas como leídas
+    # solo para quien la abrió. (Antes era un solo campo para todos.)
+    leida_por = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name="alertas_leidas")
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -128,3 +134,8 @@ class Alerta(models.Model):
 
     def __str__(self):
         return f"[{self.nivel}] {self.equipo.nombre} @ {self.timestamp:%Y-%m-%d %H:%M}"
+
+    @classmethod
+    def no_leidas_por(cls, usuario):
+        # Alertas pendientes que este usuario todavía no ha visto. Las atendidas ya no se notifican.
+        return cls.objects.filter(atendida=False).exclude(leida_por=usuario)

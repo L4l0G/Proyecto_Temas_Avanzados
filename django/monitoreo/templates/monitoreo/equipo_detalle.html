@@ -11,12 +11,15 @@
             <span class="subtitle">{{ equipo.ubicacion|default:"Sin ubicación registrada" }}</span>
         </div>
 
+        {# Las acciones solo se muestran a quien tiene el permiso que la vista exige; sin esto, el usuario confirmaba la acción y terminaba en un 403. #}
+        {% if perms.monitoreo.delete_equipo %}
         <form method="post" action="{% url 'equipo_eliminar' equipo.pk %}" class="eliminar-form" onsubmit="return confirm('¿Seguro que quieres eliminar \'{{ equipo.nombre|escapejs }}\' del tablero? Esta acción no se puede deshacer.');">
             {% csrf_token %}
             <button type="submit" class="animated-button animated-button-peligro">
                 <span class="text">Eliminar equipo</span>
             </button>
         </form>
+        {% endif %}
 
         <div class="detalle-card" id="detalle-contenido">
             <div class="detalle-estado">
@@ -97,7 +100,7 @@
                     <span class="spec-valor">{{ equipo.sistema_operativo }}</span>
                 </div>
                 {% endif %}
-                {% if equipo.numero_serie %}
+                {% if equipo.numero_serie and perms.monitoreo.change_equipo %}
                 <div class="spec-tile">
                     <span class="metrica-etiqueta">Número de serie</span>
                     <button type="button" class="spec-valor spec-oculto" title="Clic para mostrar/ocultar"
@@ -106,7 +109,7 @@
                             onclick="toggleOculto(this)">••••••••</button>
                 </div>
                 {% endif %}
-                {% if equipo.direccion_ip %}
+                {% if equipo.direccion_ip and perms.monitoreo.change_equipo %}
                 <div class="spec-tile">
                     <span class="metrica-etiqueta">Dirección IP</span>
                     <button type="button" class="spec-valor spec-oculto" title="Clic para mostrar/ocultar"
@@ -125,12 +128,14 @@
             <div class="detalle-estado">
                 <span class="badge badge-ok">Dispositivo emparejado</span>
             </div>
+            {% if perms.monitoreo.change_equipo %}
             <form method="post" action="{% url 'equipo_desemparejar' equipo.pk %}" onsubmit="return confirm('¿Desemparejar el dispositivo actual de \'{{ equipo.nombre|escapejs }}\'?\n\nDejará de reportar hasta que emparejes uno nuevo con el código que se generará.');">
                 {% csrf_token %}
                 <button type="submit" class="animated-button animated-button-peligro">
                     <span class="text">Desemparejar dispositivo</span>
                 </button>
             </form>
+            {% endif %}
             {% elif equipo.codigo_emparejamiento %}
             <div class="detalle-estado">
                 <span class="badge badge-medio">Sin dispositivo emparejado</span>
@@ -143,6 +148,7 @@
             {% endif %}
         </div>
 
+        {% if perms.monitoreo.change_equipo %}
         <div class="detalle-card detener-card">
             <p class="consejos-titulo detener-titulo">Detener un programa en esta PC</p>
             <form method="post" action="{% url 'equipo_detener_proceso' equipo.pk %}" class="detener-form" onsubmit="return confirm('¿Desea detener ' + this.proceso.options[this.proceso.selectedIndex].text + ' en ' + '{{ equipo.nombre|escapejs }}' + '?\n\nSe aplicará en el próximo reporte del equipo (máximo 1 minuto).');">
@@ -157,6 +163,7 @@
                 </button>
             </form>
         </div>
+        {% endif %}
     </div>
 {% endblock %}
 

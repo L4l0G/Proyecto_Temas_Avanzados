@@ -2,7 +2,9 @@ from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth.models import Permission, User
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -133,9 +135,23 @@ class ReportarEstadoViewTests(TestCase):
 
         sin_respuesta = Alerta.objects.get(tipo=Alerta.Tipo.SIN_RESPUESTA)
         self.assertTrue(sin_respuesta.atendida)
-        self.assertTrue(sin_respuesta.leida)
         # Las demas fallas no dependen de la conexion: se siguen atendiendo a mano.
         self.assertFalse(Alerta.objects.get(tipo=Alerta.Tipo.DISCO_LLENO).atendida)
+
+    def test_cada_reporte_borra_el_historial_de_mas_de_30_dias_del_equipo(self):
+        otro_equipo = Equipo.objects.create(nombre="PC-02")
+        viejo = HistorialEstado.objects.create(equipo=self.equipo, cpu_porcentaje=1, memoria_porcentaje=1, disco_porcentaje=1)
+        reciente = HistorialEstado.objects.create(equipo=self.equipo, cpu_porcentaje=1, memoria_porcentaje=1, disco_porcentaje=1)
+        viejo_de_otro = HistorialEstado.objects.create(equipo=otro_equipo, cpu_porcentaje=1, memoria_porcentaje=1, disco_porcentaje=1)
+        HistorialEstado.objects.filter(pk__in=[viejo.pk, viejo_de_otro.pk]).update(timestamp=timezone.now() - timedelta(days=31))
+        HistorialEstado.objects.filter(pk=reciente.pk).update(timestamp=timezone.now() - timedelta(days=29))
+
+        self._reportar()
+
+        self.assertFalse(HistorialEstado.objects.filter(pk=viejo.pk).exists())
+        self.assertTrue(HistorialEstado.objects.filter(pk=reciente.pk).exists())
+        # Solo se limpia el historial del equipo que reportó.
+        self.assertTrue(HistorialEstado.objects.filter(pk=viejo_de_otro.pk).exists())
 
     def test_reenvia_comandos_remotos_pendientes_en_el_siguiente_reporte(self):
         ComandoRemoto.objects.create(equipo=self.equipo, proceso='brave.exe')
@@ -425,11 +441,76 @@ class EquipoDetalleViewTests(TestCase):
         self.assertContains(respuesta, 'badge badge-ok">Conectado')
         self.assertFalse(Alerta.objects.exists())
 
+    def _dar_permisos(self, *codenames):
+        permisos = Permission.objects.filter(
+            content_type__app_label='monitoreo', content_type__model='equipo', codename__in=codenames,
+        )
+        self.usuario.user_permissions.set(permisos)
+
+    def _equipo_con_datos_sensibles_y_emparejado(self):
+        Equipo.objects.filter(pk=self.equipo.pk).update(
+            numero_serie='SN-12345', direccion_ip='192.168.1.50', token='token-valido',
+        )
+
     def test_muestra_el_formulario_para_detener_programas(self):
+        self._dar_permisos('change_equipo')
+
         respuesta = self._ver_detalle()
 
         self.assertContains(respuesta, 'Detener un programa en esta PC')
         self.assertContains(respuesta, 'value="brave.exe"')
+
+    def test_con_permiso_change_ve_desemparejar_y_botones_de_serie_e_ip(self):
+        self._dar_permisos('change_equipo')
+        self._equipo_con_datos_sensibles_y_emparejado()
+
+        respuesta = self._ver_detalle()
+
+        self.assertContains(respuesta, 'Desemparejar dispositivo')
+        self.assertContains(respuesta, 'data-campo="numero_serie"')
+        self.assertContains(respuesta, 'data-campo="direccion_ip"')
+        # change_equipo no incluye eliminar.
+        self.assertNotContains(respuesta, 'Eliminar equipo')
+
+    def test_sin_permisos_no_ve_acciones_pero_si_estado_metricas_y_consejos(self):
+        self._equipo_con_datos_sensibles_y_emparejado()
+        Equipo.objects.filter(pk=self.equipo.pk).update(procesador='Intel i5')
+        self._crear_reporte(cpu=95, memoria=10, disco=10)
+
+        respuesta = self._ver_detalle()
+
+        self.assertEqual(respuesta.status_code, 200)
+        # Acciones ocultas.
+        self.assertNotContains(respuesta, 'Detener un programa en esta PC')
+        self.assertNotContains(respuesta, 'value="brave.exe"')
+        self.assertNotContains(respuesta, reverse('equipo_detener_proceso', args=[self.equipo.pk]))
+        self.assertNotContains(respuesta, 'Eliminar equipo')
+        self.assertNotContains(respuesta, reverse('equipo_eliminar', args=[self.equipo.pk]))
+        self.assertNotContains(respuesta, 'Desemparejar dispositivo')
+        self.assertNotContains(respuesta, reverse('equipo_desemparejar', args=[self.equipo.pk]))
+        self.assertNotContains(respuesta, 'data-campo="numero_serie"')
+        self.assertNotContains(respuesta, 'data-campo="direccion_ip"')
+        self.assertNotContains(respuesta, reverse('equipo_datos_sensibles', args=[self.equipo.pk]))
+        # Información de solo lectura visible.
+        self.assertContains(respuesta, 'badge badge-ok">Activo')
+        self.assertContains(respuesta, 'badge badge-ok">Conectado')
+        self.assertContains(respuesta, 'Dispositivo emparejado')
+        self.assertContains(respuesta, 'Intel i5')
+        self.assertContains(respuesta, 'class="metrica-valor metric-alto">95.0%')
+        self.assertEqual(respuesta.context['metricas']['cpu_clase'], 'metric-alto')
+        self.assertContains(respuesta, 'Posibles causas y qué hacer')
+        self.assertEqual(len(respuesta.context['consejos']), 1)
+        self.assertIn('CPU', respuesta.context['consejos'][0])
+
+    def test_con_permiso_delete_ve_eliminar_equipo(self):
+        self._dar_permisos('delete_equipo')
+
+        respuesta = self._ver_detalle()
+
+        self.assertContains(respuesta, 'Eliminar equipo')
+        self.assertContains(respuesta, reverse('equipo_eliminar', args=[self.equipo.pk]))
+        # delete_equipo no incluye las acciones de change_equipo.
+        self.assertNotContains(respuesta, 'Detener un programa en esta PC')
 
     def test_los_mensajes_se_muestran_con_la_clase_de_su_nivel(self):
         permisos = Permission.objects.filter(content_type__app_label='monitoreo', codename='change_equipo')
@@ -470,6 +551,20 @@ class AutorizacionEquipoViewsTests(TestCase):
         respuesta = self.client.post(reverse('equipo_eliminar', args=[self.equipo.pk]))
 
         self.assertEqual(respuesta.status_code, 403)
+        self.assertTrue(Equipo.objects.filter(pk=self.equipo.pk).exists())
+
+    def test_403_muestra_la_pagina_en_espanol_con_enlace_al_tablero(self):
+        self.client.force_login(self.sin_permiso)
+
+        respuesta = self.client.post(reverse('equipo_eliminar', args=[self.equipo.pk]))
+
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertTemplateUsed(respuesta, '403.html')
+        self.assertContains(respuesta, 'No tienes permiso para esta acción', status_code=403)
+        self.assertContains(
+            respuesta, f'href="{reverse("tablero")}" class="volver-link"', status_code=403,
+        )
+        self.assertContains(respuesta, 'Volver al tablero', status_code=403)
         self.assertTrue(Equipo.objects.filter(pk=self.equipo.pk).exists())
 
     def test_con_permiso_si_puede_eliminar_equipo(self):
@@ -520,28 +615,32 @@ class AlertaViewsTests(TestCase):
             equipo=self.equipo, tipo=Alerta.Tipo.CPU_ALTO, mensaje="CPU alto",
         )
 
-    def test_atender_marca_la_alerta_como_atendida_y_leida(self):
+    def test_atender_marca_la_alerta_como_atendida_y_deja_de_notificarse(self):
         respuesta = self.client.post(reverse('alerta_atender', args=[self.alerta.pk]))
 
-        self.assertRedirects(respuesta, reverse('tablero'))
+        # Sin seguir la redirección: abrir el tablero crearía una alerta "sin respuesta" para este equipo de prueba.
+        self.assertRedirects(respuesta, reverse('tablero'), fetch_redirect_response=False)
         self.alerta.refresh_from_db()
         self.assertTrue(self.alerta.atendida)
-        self.assertTrue(self.alerta.leida)
+        self.assertEqual(self.client.get(reverse('alertas_no_leidas')).json()['total'], 0)
 
-    def test_no_leidas_solo_cuenta_las_que_no_se_han_visto(self):
-        Alerta.objects.create(
-            equipo=self.equipo, tipo=Alerta.Tipo.DISCO_LLENO, mensaje="Disco lleno", leida=True,
-        )
+    def test_no_leidas_solo_cuenta_las_que_el_usuario_no_ha_visto(self):
+        vista = Alerta.objects.create(equipo=self.equipo, tipo=Alerta.Tipo.DISCO_LLENO, mensaje="Disco lleno")
+        vista.leida_por.add(self.usuario)
 
         datos = self.client.get(reverse('alertas_no_leidas')).json()
 
         self.assertEqual(datos['total'], 1)
         self.assertEqual(datos['alertas'][0]['id'], self.alerta.pk)
 
-    def test_marcar_leidas_las_marca_todas(self):
+    def test_marcar_leidas_solo_aplica_al_usuario_que_abrio_la_campana(self):
+        companero = User.objects.create_user('companero', password='clave-de-prueba-1')
+
         self.client.post(reverse('alertas_marcar_leidas'))
 
-        self.assertFalse(Alerta.objects.filter(leida=False).exists())
+        self.assertEqual(self.client.get(reverse('alertas_no_leidas')).json()['total'], 0)
+        self.client.force_login(companero)
+        self.assertEqual(self.client.get(reverse('alertas_no_leidas')).json()['total'], 1)
 
     def test_las_vistas_del_tablero_exigen_inicio_de_sesion(self):
         self.client.logout()
@@ -555,6 +654,34 @@ class TableroViewTests(TestCase):
     def setUp(self):
         self.usuario = User.objects.create_user('operador', password='clave-de-prueba-1')
         self.client.force_login(self.usuario)
+
+    def _equipo_desconectado(self, minutos=10):
+        equipo = Equipo.objects.create(nombre="PC-01", estado=Equipo.Estado.ACTIVO)
+        historial = HistorialEstado.objects.create(equipo=equipo, cpu_porcentaje=1, memoria_porcentaje=1, disco_porcentaje=1)
+        HistorialEstado.objects.filter(pk=historial.pk).update(timestamp=timezone.now() - timedelta(minutes=minutos))
+        return equipo
+
+    def test_la_alerta_sin_respuesta_atendida_no_reaparece_mientras_siga_desconectado(self):
+        equipo = self._equipo_desconectado()
+        self.client.get(reverse('tablero'))
+        Alerta.objects.filter(equipo=equipo).update(atendida=True)
+
+        self.client.get(reverse('tablero'))
+        self.client.get(reverse('equipo_detalle', args=[equipo.pk]))
+
+        self.assertEqual(Alerta.objects.filter(equipo=equipo, tipo=Alerta.Tipo.SIN_RESPUESTA).count(), 1)
+
+    def test_una_nueva_desconexion_si_genera_otra_alerta(self):
+        equipo = self._equipo_desconectado(minutos=30)
+        self.client.get(reverse('tablero'))
+        Alerta.objects.filter(equipo=equipo).update(atendida=True, timestamp=timezone.now() - timedelta(minutes=25))
+        # El equipo volvió a reportar y luego se volvió a desconectar.
+        historial = HistorialEstado.objects.create(equipo=equipo, cpu_porcentaje=1, memoria_porcentaje=1, disco_porcentaje=1)
+        HistorialEstado.objects.filter(pk=historial.pk).update(timestamp=timezone.now() - timedelta(minutes=10))
+
+        self.client.get(reverse('tablero'))
+
+        self.assertEqual(Alerta.objects.filter(equipo=equipo, tipo=Alerta.Tipo.SIN_RESPUESTA).count(), 2)
 
     def test_equipo_sin_reporte_reciente_se_marca_inactivo_y_genera_alerta(self):
         equipo = Equipo.objects.create(nombre="PC-01", estado=Equipo.Estado.ACTIVO)
@@ -587,6 +714,88 @@ class TableroViewTests(TestCase):
 
         equipo_en_contexto = respuesta.context['equipos'][0]
         self.assertEqual(equipo_en_contexto.tipos_falla, 'memoria_alta')
+
+    def _crear_equipos_conectados(self, cantidad, desde=0):
+        for i in range(desde, desde + cantidad):
+            equipo = Equipo.objects.create(
+                nombre=f"PC-{i:03d}", estado=Equipo.Estado.ACTIVO, ubicacion=f"Sala {i % 3}",
+            )
+            for minutos in (2, 1, 0):
+                historial = HistorialEstado.objects.create(
+                    equipo=equipo, cpu_porcentaje=10, memoria_porcentaje=10, disco_porcentaje=10,
+                )
+                HistorialEstado.objects.filter(pk=historial.pk).update(
+                    timestamp=timezone.now() - timedelta(minutes=minutos, seconds=1)
+                )
+
+    def _contar_consultas_del_tablero(self):
+        with CaptureQueriesContext(connection) as consultas:
+            respuesta = self.client.get(reverse('tablero'))
+        self.assertEqual(respuesta.status_code, 200)
+        return len(consultas), respuesta
+
+    def test_numero_de_consultas_no_crece_con_la_cantidad_de_equipos(self):
+        self._crear_equipos_conectados(3)
+        # Primera visita aparte: calienta caches de sesión/permisos para que no sesguen la comparación.
+        self.client.get(reverse('tablero'))
+        consultas_con_3, respuesta_3 = self._contar_consultas_del_tablero()
+        self.assertEqual(len(respuesta_3.context['equipos']), 3)
+
+        self._crear_equipos_conectados(27, desde=3)
+        consultas_con_30, respuesta_30 = self._contar_consultas_del_tablero()
+        self.assertEqual(len(respuesta_30.context['equipos']), 30)
+
+        self.assertEqual(consultas_con_3, consultas_con_30)
+        # Todos reportaron hace poco y conectados: no debe generarse ninguna alerta.
+        self.assertFalse(Alerta.objects.exists())
+        self.assertTrue(all(e.estado_visible == Equipo.Estado.ACTIVO for e in respuesta_30.context['equipos']))
+        self.assertTrue(all(e.conectado_visible for e in respuesta_30.context['equipos']))
+
+    def test_muestra_activo_al_conectado_e_inactivo_al_que_no_reporta(self):
+        conectado = Equipo.objects.create(nombre="PC-Conectada", estado=Equipo.Estado.ACTIVO)
+        # Un reporte viejo desconectado y uno reciente conectado: debe tomarse el más reciente.
+        viejo = HistorialEstado.objects.create(
+            equipo=conectado, cpu_porcentaje=1, memoria_porcentaje=1, disco_porcentaje=1, conectado=False,
+        )
+        HistorialEstado.objects.filter(pk=viejo.pk).update(timestamp=timezone.now() - timedelta(minutes=30))
+        HistorialEstado.objects.create(
+            equipo=conectado, cpu_porcentaje=1, memoria_porcentaje=1, disco_porcentaje=1, conectado=True,
+        )
+        sin_reporte_reciente = Equipo.objects.create(nombre="PC-Vieja", estado=Equipo.Estado.ACTIVO)
+        historial = HistorialEstado.objects.create(
+            equipo=sin_reporte_reciente, cpu_porcentaje=1, memoria_porcentaje=1, disco_porcentaje=1,
+        )
+        HistorialEstado.objects.filter(pk=historial.pk).update(timestamp=timezone.now() - timedelta(minutes=10))
+        sin_reportes = Equipo.objects.create(nombre="PC-Nueva", estado=Equipo.Estado.ACTIVO)
+
+        respuesta = self.client.get(reverse('tablero'))
+
+        equipos = {e.pk: e for e in respuesta.context['equipos']}
+        self.assertEqual(equipos[conectado.pk].estado_visible, Equipo.Estado.ACTIVO)
+        self.assertTrue(equipos[conectado.pk].conectado_visible)
+        for equipo in (sin_reporte_reciente, sin_reportes):
+            self.assertEqual(equipos[equipo.pk].estado_visible, Equipo.Estado.INACTIVO)
+            self.assertFalse(equipos[equipo.pk].conectado_visible)
+            equipo.refresh_from_db()
+            self.assertEqual(equipo.estado, Equipo.Estado.INACTIVO)
+            self.assertTrue(Alerta.objects.filter(equipo=equipo, tipo=Alerta.Tipo.SIN_RESPUESTA).exists())
+        self.assertFalse(Alerta.objects.filter(equipo=conectado).exists())
+        html = respuesta.content.decode()
+        self.assertRegex(html, r'data-nombre="pc-conectada"\s+data-estado="activo"')
+        self.assertRegex(html, r'data-nombre="pc-vieja"\s+data-estado="inactivo"')
+        self.assertRegex(html, r'data-nombre="pc-nueva"\s+data-estado="inactivo"')
+
+    def test_reporte_reciente_desconectado_se_muestra_sin_conexion(self):
+        equipo = Equipo.objects.create(nombre="PC-01", estado=Equipo.Estado.ACTIVO)
+        HistorialEstado.objects.create(
+            equipo=equipo, cpu_porcentaje=1, memoria_porcentaje=1, disco_porcentaje=1, conectado=False,
+        )
+
+        respuesta = self.client.get(reverse('tablero'))
+
+        en_contexto = respuesta.context['equipos'][0]
+        self.assertFalse(en_contexto.conectado_visible)
+        self.assertEqual(en_contexto.estado_visible, Equipo.Estado.ACTIVO)
 
 
 class PermisosTests(TestCase):
