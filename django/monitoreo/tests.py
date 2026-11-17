@@ -347,6 +347,29 @@ class ReportarEstadoViewTests(TestCase):
         self.assertEqual(self.equipo.estado, Equipo.Estado.INACTIVO)
         self.assertFalse(Alerta.objects.get().atendida)
 
+    # Robustez: cualquier entrada mal formada debe responder 400 (error del cliente), nunca 500.
+    # Se desactiva raise_request_exception para ver el código HTTP que recibiría el agente.
+
+    def test_equipo_que_no_es_numero_da_400_y_no_500(self):
+        self.client.raise_request_exception = False
+
+        respuesta = self._reportar_json(equipo='abc')
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(self.equipo.historial.count(), 0)
+
+    def test_reporte_que_no_es_un_objeto_json_da_400_y_no_500(self):
+        self.client.raise_request_exception = False
+
+        respuesta = self.client.post(reverse('reportar_estado'), [1, 2, 3], content_type='application/json')
+
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_equipo_inexistente_da_404(self):
+        respuesta = self._reportar_json(equipo=999999)
+
+        self.assertEqual(respuesta.status_code, 404)
+
 
 class EquipoDetalleViewTests(TestCase):
     def setUp(self):
@@ -796,6 +819,24 @@ class TableroViewTests(TestCase):
         en_contexto = respuesta.context['equipos'][0]
         self.assertFalse(en_contexto.conectado_visible)
         self.assertEqual(en_contexto.estado_visible, Equipo.Estado.ACTIVO)
+
+    def test_con_dos_reportes_de_la_misma_fecha_usa_siempre_el_ultimo_guardado(self):
+        # Hallazgo de la revisión por pares: la fecha y la conexión salen de dos subconsultas distintas; con
+        # reportes empatados en fecha, sin desempate cada una podía tomar un reporte diferente.
+        equipo = Equipo.objects.create(nombre="PC-01", estado=Equipo.Estado.ACTIVO)
+        primero = HistorialEstado.objects.create(
+            equipo=equipo, cpu_porcentaje=1, memoria_porcentaje=1, disco_porcentaje=1, conectado=False,
+        )
+        segundo = HistorialEstado.objects.create(
+            equipo=equipo, cpu_porcentaje=1, memoria_porcentaje=1, disco_porcentaje=1, conectado=True,
+        )
+        HistorialEstado.objects.filter(pk=segundo.pk).update(timestamp=primero.timestamp)
+
+        en_tablero = self.client.get(reverse('tablero')).context['equipos'][0]
+        en_detalle = self.client.get(reverse('equipo_detalle', args=[equipo.pk])).context['equipo']
+
+        self.assertTrue(en_tablero.conectado_visible)
+        self.assertTrue(en_detalle.conectado_visible)
 
 
 class PermisosTests(TestCase):

@@ -108,7 +108,8 @@ def _calcular_estado_visible(equipo, ultimo_timestamp, ultimo_conectado, ultima_
 def tablero(request):
     # Antes se pedía el último reporte de cada equipo dentro del bucle (una consulta por equipo).
     # Ahora la base calcula la fecha y la conexión del último reporte de todos en la misma consulta de equipos.
-    ultimo_reporte = HistorialEstado.objects.filter(equipo=OuterRef('pk')).order_by('-timestamp')
+    # El '-pk' desempata reportes con la misma fecha: sin él, las dos subconsultas podían elegir reportes distintos.
+    ultimo_reporte = HistorialEstado.objects.filter(equipo=OuterRef('pk')).order_by('-timestamp', '-pk')
     equipos = Equipo.objects.annotate(
         ultimo_timestamp=Subquery(ultimo_reporte.values('timestamp')[:1]),
         ultimo_conectado=Subquery(ultimo_reporte.values('conectado')[:1]),
@@ -163,7 +164,7 @@ def _generar_consejos(equipo, ultimo_reporte):
 @login_required
 def equipo_detalle(request, pk):
     equipo = get_object_or_404(Equipo, pk=pk)
-    ultimo_reporte = equipo.historial.order_by('-timestamp').first()  # type: ignore[attr-defined]
+    ultimo_reporte = equipo.historial.order_by('-timestamp', '-pk').first()  # type: ignore[attr-defined]
     _calcular_estado_visible(
         equipo,
         ultimo_reporte.timestamp if ultimo_reporte else None,
@@ -306,13 +307,17 @@ def equipo_reclamar(request, pk):
 
 @api_view(['POST'])
 def reportar_estado(request):
-    equipo_id = request.data.get('equipo')
+    # Un cuerpo que no es un objeto JSON (ej. una lista) o un equipo que no es número antes tronaban con un 500.
+    if not isinstance(request.data, dict):
+        return Response({'detail': 'El reporte debe ser un objeto JSON.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    equipo_id = str(request.data.get('equipo', ''))
     token = str(request.data.get('token', ''))
 
-    if not equipo_id or not token:
-        return Response({'detail': 'Se requiere equipo y token.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not equipo_id.isdigit() or not token:
+        return Response({'detail': 'Se requiere un equipo válido y su token.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    equipo = get_object_or_404(Equipo, pk=equipo_id)
+    equipo = get_object_or_404(Equipo, pk=int(equipo_id))
     if not equipo.token or not secrets.compare_digest(token, equipo.token):
         return Response({'detail': 'Token inválido para este equipo.'}, status=status.HTTP_403_FORBIDDEN)
 
