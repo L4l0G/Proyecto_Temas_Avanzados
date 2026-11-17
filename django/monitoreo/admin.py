@@ -2,6 +2,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.contrib.admin.actions import delete_selected
 from django.contrib.auth.admin import GroupAdmin, UserAdmin
+from django.contrib.auth.forms import AdminPasswordChangeForm, UserCreationForm
 from django.contrib.auth.models import Group, User
 from django.utils.text import capfirst
 from .models import ComandoRemoto, Equipo, HistorialEstado, Alerta
@@ -51,8 +52,24 @@ class OcultarRelacionesInternasMixin:
         return filtrar(a_borrar), conteo, permisos_faltantes, protegidos
 
 
+class CambioContrasenaForm(AdminPasswordChangeForm):
+    # Django ofrece "desactivar la autenticación basada en contraseña" pensando en sistemas con SSO o LDAP.
+    # Aquí no hay otro método de inicio de sesión: desactivarla dejaría al usuario sin forma de entrar.
+    def __init__(self, user, *args, **kwargs):
+        super().__init__(user, *args, **kwargs)
+        self.fields.pop('usable_password', None)
+        self.fields['password1'].required = True
+        self.fields['password2'].required = True
+
+
 class UserAdminPersonalizado(OcultarRelacionesInternasMixin, UserAdmin):
     actions = [accion_eliminar('Eliminar usuarios seleccionados')]
+    # Mismo motivo que CambioContrasenaForm: al crear un usuario no se ofrece la opción de dejarlo sin contraseña.
+    add_form = UserCreationForm
+    add_fieldsets = (
+        (None, {'classes': ('wide',), 'fields': ('username', 'password1', 'password2')}),
+    )
+    change_password_form = CambioContrasenaForm
 
     # El form de Django trae un texto explicando el algoritmo/salt/hash de la
     # contraseña, que para el personal no aporta nada util: se quita

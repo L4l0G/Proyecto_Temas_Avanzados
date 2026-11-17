@@ -811,3 +811,37 @@ class PermisosTests(TestCase):
 
         permiso.refresh_from_db()
         self.assertTrue(permiso.name.startswith('Puede ver'))
+
+
+class AdminUsuariosSinDesactivarContrasenaTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser('admin', password='clave-de-prueba-1')
+        self.client.force_login(self.admin)
+
+    def test_crear_usuario_no_ofrece_desactivar_la_contrasena_y_la_exige(self):
+        respuesta = self.client.get(reverse('admin:auth_user_add'))
+        self.assertNotContains(respuesta, 'name="usable_password"')
+
+        sin_contrasena = self.client.post(reverse('admin:auth_user_add'), {'username': 'nuevo'})
+        self.assertEqual(sin_contrasena.status_code, 200)
+        self.assertFalse(User.objects.filter(username='nuevo').exists())
+
+        self.client.post(reverse('admin:auth_user_add'), {
+            'username': 'nuevo', 'password1': 'Una-clave-segura-8', 'password2': 'Una-clave-segura-8',
+        })
+        self.assertTrue(User.objects.get(username='nuevo').check_password('Una-clave-segura-8'))
+
+    def test_cambiar_contrasena_no_ofrece_desactivarla(self):
+        usuario = User.objects.create_user('tecnico', password='clave-de-prueba-1')
+        url = reverse('admin:auth_user_password_change', args=[usuario.pk])
+
+        respuesta = self.client.get(url)
+        self.assertNotContains(respuesta, 'name="usable_password"')
+        self.assertNotContains(respuesta, 'unset-password')
+
+        self.client.post(url, {
+            'password1': 'Otra-clave-segura-9', 'password2': 'Otra-clave-segura-9', 'set-password': '1',
+        })
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.check_password('Otra-clave-segura-9'))
+
