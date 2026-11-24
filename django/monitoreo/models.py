@@ -69,6 +69,9 @@ class HistorialEstado(models.Model):
 
     class Meta:
         ordering = ["-timestamp"]
+        # Sin esto Django arma el plural agregando una "s" al nombre de la clase ("historial estados").
+        verbose_name = "registro de historial"
+        verbose_name_plural = "historial de estados"
         # El tablero y el detalle siempre buscan el reporte más reciente de un equipo. Sin este índice, la
         # base tenía que ordenar todo el historial del equipo en cada consulta (crece 1,440 filas al día).
         indexes = [models.Index(fields=["equipo", "-timestamp"], name="historial_equipo_ts_idx")]
@@ -94,6 +97,9 @@ class ComandoRemoto(models.Model):
 
     class Meta:
         ordering = ["-creado"]
+        # Sin esto Django arma el plural agregando una "s" al nombre de la clase ("comando remotos").
+        verbose_name = "comando remoto"
+        verbose_name_plural = "comandos remotos"
 
     def __str__(self):
         return f"Detener {self.proceso} en {self.equipo.nombre}"
