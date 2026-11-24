@@ -22,6 +22,10 @@ NOMBRE_TAREA = NOMBRE_AGENTE
 NOMBRE_EXE_AGENTE = "AgenteMonitoreo.exe"
 INTERVALO_MINUTOS_POR_DEFECTO = 1
 
+# Misma lista que PROGRAMAS_DETENIBLES en el servidor (django/monitoreo/models.py). El agente corre como SYSTEM,
+# así que la repite: aunque el servidor (o alguien que lo suplante) pida cerrar otro programa, no lo cierra.
+PROGRAMAS_DETENIBLES = {"brave.exe", "msedge.exe", "powerpnt.exe", "excel.exe", "winword.exe", "cybercafe.client"}
+
 # CREATE_NO_WINDOW evita que se abra una consola negra al llamar a schtasks desde el .exe compilado con --noconsole.
 CREATE_NO_WINDOW = 0x08000000
 
@@ -39,6 +43,11 @@ def cargar_config():
 def guardar_config(config):
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
+
+
+def servidor_permitido(servidor_base):
+    # El token del equipo viaja en cada reporte: solo se acepta HTTPS, salvo el servidor local de desarrollo.
+    return servidor_base.startswith(("https://", "http://127.0.0.1", "http://localhost"))
 
 
 def obtener_equipos(servidor_base):
@@ -93,6 +102,9 @@ def ejecutar_asistente_configuracion():
     def conectar():
         nonlocal equipos_disponibles
         servidor_base = entrada_servidor.get().strip().rstrip("/")
+        if not servidor_permitido(servidor_base):
+            estado_label.config(text="La dirección debe empezar con https:// para proteger el token del equipo.")
+            return
         estado_label.config(text="Conectando...")
         ventana.update()
         try:
@@ -121,6 +133,9 @@ def ejecutar_asistente_configuracion():
 
         equipo = equipos_disponibles[combo_equipos.current()]
         servidor_base = entrada_servidor.get().strip().rstrip("/")
+        if not servidor_permitido(servidor_base):
+            estado_label.config(text="La dirección debe empezar con https:// para proteger el token del equipo.")
+            return
 
         estado_label.config(text="Verificando código...")
         ventana.update()
@@ -271,7 +286,7 @@ def detener_agentes_en_ejecucion():
 
 
 def detener_procesos(nombres_proceso):
-    nombres_buscados = {nombre.lower() for nombre in nombres_proceso}
+    nombres_buscados = {nombre.lower() for nombre in nombres_proceso} & PROGRAMAS_DETENIBLES
     detenidos = []
     for proceso in psutil.process_iter(["name"]):
         try:

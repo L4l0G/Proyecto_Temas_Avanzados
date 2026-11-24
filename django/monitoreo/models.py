@@ -1,3 +1,4 @@
+import hashlib
 import secrets
 import string
 
@@ -8,6 +9,13 @@ from django.db import models
 def _generar_codigo_aleatorio():
     alfabeto = string.ascii_uppercase + string.digits
     return ''.join(secrets.choice(alfabeto) for _ in range(6))
+
+
+def hash_token(token):
+    # La base guarda solo el hash del token del agente: quien obtenga una copia de la base no puede usarlo
+    # para reportar en nombre de un equipo. SHA-256 basta (a diferencia de las contraseñas, que usan PBKDF2)
+    # porque el token es aleatorio de 192 bits y no se puede adivinar probando palabras comunes.
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 # Lista blanca de programas que se pueden detener remotamente desde el tablero.
@@ -40,6 +48,7 @@ class Equipo(models.Model):
         max_length=20, choices=Estado.choices, default=Estado.INACTIVO
     )
     fecha_registro = models.DateTimeField(auto_now_add=True)
+    # Hash SHA-256 del token del agente (ver hash_token); vacío si no hay un dispositivo emparejado.
     token = models.CharField(max_length=64, blank=True, default="")
     codigo_emparejamiento = models.CharField(max_length=12, blank=True, default="")
 
@@ -55,6 +64,18 @@ class Equipo(models.Model):
         self.token = ""
         self.save(update_fields=["codigo_emparejamiento", "token"])
         return self.codigo_emparejamiento
+
+    def emparejar(self):
+        """Crea el token del agente, guarda solo su hash y devuelve el token en claro (única vez que existe)."""
+        token = secrets.token_hex(24)
+        self.token = hash_token(token)
+        self.codigo_emparejamiento = ""
+        self.save(update_fields=["token", "codigo_emparejamiento"])
+        return token
+
+    def token_valido(self, token):
+        # compare_digest tarda lo mismo acierte o no, para no dar pistas del valor por el tiempo de respuesta.
+        return bool(self.token) and secrets.compare_digest(hash_token(token), self.token)
 
 
 class HistorialEstado(models.Model):

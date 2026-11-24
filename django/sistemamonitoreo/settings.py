@@ -25,7 +25,9 @@ load_dotenv(BASE_DIR / '.env')
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+# Apagado por defecto: si en el servidor falta la variable, el sistema no arranca en modo de depuración
+# (que muestra código y configuración en las páginas de error). En local se activa desde el .env.
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # La clave real solo vive en el .env o en las variables del servidor. Sin ella,
@@ -55,10 +57,9 @@ SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 # HSTS: tras la primera visita por HTTPS, el navegador recuerda usar siempre
 # HTTPS en este dominio, aunque se escriba http:// o nada - sin pasar ni una
-# vez por HTTP. Ya se confirmo que HTTPS funciona en Render. Empieza en 1 hora
-# a proposito: si algo fallara con el SSL, el dominio solo quedaria
-# inaccesible ese tiempo. Una vez probado, subirlo a 31536000 (1 año).
-SECURE_HSTS_SECONDS = 0 if DEBUG else 3600
+# vez por HTTP. Empezo en 1 hora mientras se probaba el SSL de Render; con
+# HTTPS ya confirmado, se usa 1 año, el valor que recomienda Django.
+SECURE_HSTS_SECONDS = 0 if DEBUG else 31536000
 
 
 # Application definition
@@ -94,9 +95,22 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# Los agentes corren en las PCs monitoreadas, en la misma red local;
-# de momento se permite cualquier origen porque no hay dominio fijo.
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS solo aplica a páginas web de otros dominios que llaman a la API desde el navegador. El agente no es un
+# navegador y las páginas del sistema se sirven desde el mismo dominio, así que no se permite ningún origen
+# externo (antes se permitían todos).
+CORS_ALLOW_ALL_ORIGINS = False
+
+REST_FRAMEWORK = {
+    # Las vistas de la API validan su propio token o código; no se aceptan sesiones ni usuario y contraseña
+    # por Basic Auth, que permitirían probar contraseñas del personal contra la API.
+    'DEFAULT_AUTHENTICATION_CLASSES': [],
+    # Solo JSON: sin la interfaz HTML navegable de DRF, que expone la estructura de la API.
+    'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
+    'DEFAULT_THROTTLE_RATES': {'emparejamiento': '5/min'},
+    # Detrás del proxy de Render, la IP real del cliente es la última de X-Forwarded-For; sin esto, un atacante
+    # podría cambiar esa cabecera para evitar el límite de intentos.
+    'NUM_PROXIES': None if DEBUG else 1,
+}
 
 ROOT_URLCONF = 'sistemamonitoreo.urls'
 

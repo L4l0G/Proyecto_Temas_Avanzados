@@ -10,9 +10,10 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.throttling import AnonRateThrottle
 from .models import Alerta, ComandoRemoto, Equipo, HistorialEstado, PROGRAMAS_DETENIBLES
 from .serializers import EquipoSerializer, EspecificacionesSerializer, HistorialEstadoSerializer
 
@@ -285,12 +286,21 @@ def alertas_marcar_leidas(request):
 
 @api_view(['GET'])
 def listar_equipos(request):
-    equipos = Equipo.objects.all()
+    # La API no pide sesión (la usa el asistente del agente): solo se listan los equipos que esperan ser
+    # emparejados, en lugar de exponer el nombre y la ubicación de todo el inventario.
+    equipos = Equipo.objects.exclude(codigo_emparejamiento='')
     serializer = EquipoSerializer(equipos, many=True)
     return Response(serializer.data)
 
 
+class LimiteEmparejamiento(AnonRateThrottle):
+    # Limita los intentos por dirección IP (tasa en settings.REST_FRAMEWORK) para que el código de 6 caracteres
+    # no se pueda adivinar probando combinaciones.
+    scope = 'emparejamiento'
+
+
 @api_view(['POST'])
+@throttle_classes([LimiteEmparejamiento])
 def equipo_reclamar(request, pk):
     equipo = get_object_or_404(Equipo, pk=pk)
     codigo = str(request.data.get('codigo', '')).strip().upper()
@@ -298,11 +308,7 @@ def equipo_reclamar(request, pk):
     if not codigo or not equipo.codigo_emparejamiento or not secrets.compare_digest(codigo, equipo.codigo_emparejamiento):
         return Response({'detail': 'Código de emparejamiento inválido o ya usado.'}, status=status.HTTP_403_FORBIDDEN)
 
-    equipo.token = secrets.token_hex(24)
-    equipo.codigo_emparejamiento = ''
-    equipo.save(update_fields=['token', 'codigo_emparejamiento'])
-
-    return Response({'token': equipo.token})
+    return Response({'token': equipo.emparejar()})
 
 
 @api_view(['POST'])
@@ -318,7 +324,7 @@ def reportar_estado(request):
         return Response({'detail': 'Se requiere un equipo válido y su token.'}, status=status.HTTP_400_BAD_REQUEST)
 
     equipo = get_object_or_404(Equipo, pk=int(equipo_id))
-    if not equipo.token or not secrets.compare_digest(token, equipo.token):
+    if not equipo.token_valido(token):
         return Response({'detail': 'Token inválido para este equipo.'}, status=status.HTTP_403_FORBIDDEN)
 
     # Primero se valida todo el reporte y solo después se guarda. Antes la IP se revisaba al final: si venía mal

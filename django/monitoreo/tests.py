@@ -1,14 +1,18 @@
 from datetime import timedelta
 from unittest import mock
 
+from importlib import import_module
+
+from django.apps import apps
 from django.contrib.auth.models import Permission, User
+from django.core.cache import cache
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Alerta, ComandoRemoto, Equipo, HistorialEstado
+from .models import Alerta, ComandoRemoto, Equipo, HistorialEstado, hash_token
 from .permisos import traducir_permisos
 
 
@@ -26,6 +30,8 @@ class EquipoModelTests(TestCase):
 
 class EquipoReclamarViewTests(TestCase):
     def setUp(self):
+        # El límite de intentos se guarda en la caché; se limpia para que cada prueba empiece sin intentos.
+        cache.clear()
         self.equipo = Equipo.objects.create(nombre="PC-01")
         self.equipo.generar_codigo_emparejamiento()
 
@@ -37,9 +43,22 @@ class EquipoReclamarViewTests(TestCase):
 
         self.assertEqual(respuesta.status_code, 200)
         self.equipo.refresh_from_db()
-        self.assertEqual(respuesta.json()['token'], self.equipo.token)
-        self.assertNotEqual(self.equipo.token, "")
+        token = respuesta.json()['token']
+        # La base guarda el hash, nunca el token en claro.
+        self.assertEqual(self.equipo.token, hash_token(token))
+        self.assertNotEqual(self.equipo.token, token)
         self.assertEqual(self.equipo.codigo_emparejamiento, "")
+
+    def test_despues_de_5_intentos_fallidos_bloquea_aunque_el_codigo_sea_correcto(self):
+        url = reverse('equipo_reclamar', args=[self.equipo.pk])
+        fallidos = [self.client.post(url, {'codigo': f'MALO{i}'}).status_code for i in range(5)]
+
+        bloqueado = self.client.post(url, {'codigo': self.equipo.codigo_emparejamiento})
+
+        self.assertEqual(fallidos, [403] * 5)
+        self.assertEqual(bloqueado.status_code, 429)
+        self.equipo.refresh_from_db()
+        self.assertEqual(self.equipo.token, "")
 
     def test_codigo_incorrecto_es_rechazado(self):
         respuesta = self.client.post(
@@ -62,10 +81,50 @@ class EquipoReclamarViewTests(TestCase):
         self.assertEqual(segunda_respuesta.status_code, 403)
 
 
+class SeguridadApiTests(TestCase):
+    def test_lista_de_equipos_solo_muestra_los_que_esperan_emparejarse(self):
+        pendiente = Equipo.objects.create(nombre="PC-Pendiente")
+        pendiente.generar_codigo_emparejamiento()
+        Equipo.objects.create(nombre="PC-Emparejada", token=hash_token("x"))
+        Equipo.objects.create(nombre="PC-Sin-codigo")
+
+        respuesta = self.client.get(reverse('listar_equipos'))
+
+        self.assertEqual([e['nombre'] for e in respuesta.json()], ["PC-Pendiente"])
+
+    def test_la_api_responde_solo_json_aunque_la_pida_un_navegador(self):
+        respuesta = self.client.get(reverse('listar_equipos'), HTTP_ACCEPT='text/html')
+
+        self.assertEqual(respuesta['Content-Type'], 'application/json')
+
+    def test_el_hash_copiado_de_la_base_no_sirve_como_token(self):
+        equipo = Equipo.objects.create(nombre="PC-01", token=hash_token("token-secreto"))
+
+        respuesta = self.client.post(reverse('reportar_estado'), {
+            'equipo': equipo.pk, 'token': equipo.token,
+            'cpu_porcentaje': 1, 'memoria_porcentaje': 1, 'disco_porcentaje': 1, 'conectado': True,
+        })
+
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_la_migracion_convierte_los_tokens_existentes_en_hash(self):
+        equipo = Equipo.objects.create(nombre="PC-01", token="token-en-texto-plano")
+        sin_token = Equipo.objects.create(nombre="PC-02")
+        migracion = import_module('monitoreo.migrations.0012_tokens_de_agentes_como_hash')
+
+        migracion.tokens_a_hash(apps, None)
+
+        equipo.refresh_from_db()
+        sin_token.refresh_from_db()
+        self.assertEqual(equipo.token, hash_token("token-en-texto-plano"))
+        self.assertTrue(equipo.token_valido("token-en-texto-plano"))
+        self.assertEqual(sin_token.token, "")
+
+
 class ReportarEstadoViewTests(TestCase):
     def setUp(self):
         self.equipo = Equipo.objects.create(nombre="PC-01")
-        self.equipo.token = "token-valido"
+        self.equipo.token = hash_token("token-valido")
         self.equipo.save(update_fields=['token'])
 
     def _reportar(self, **overrides):
