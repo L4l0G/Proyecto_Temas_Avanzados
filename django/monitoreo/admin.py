@@ -1,4 +1,7 @@
 from django.conf import settings
+from collections import Counter
+
+from django.apps import apps
 from django.contrib import admin
 from django.contrib.admin.actions import delete_selected
 from django.contrib.auth.admin import GroupAdmin, UserAdmin
@@ -23,33 +26,49 @@ def accion_eliminar(descripcion):
     return delete_selected_con_descripcion
 
 
-class OcultarRelacionesInternasMixin:
-    # Al borrar usuarios o grupos, la confirmacion de Django tambien lista las tablas intermedias de sus
-    # permisos y grupos ("Relación user - permission: User_user_permissions object (1)"...). Son enlaces
-    # internos que se borran solos, con nombres en ingles que no se pueden traducir: se quitan de la lista.
+# De cada tipo de objeto relacionado se muestran solo estos en la confirmación de borrado.
+MAXIMO_POR_TIPO = 5
+
+
+class ConfirmacionDeBorradoMixin:
+    # La página de confirmación de borrado de Django lista cada objeto relacionado, uno por uno. Con el historial
+    # (1,440 reportes por equipo al día) eso daba miles de líneas. Aquí se ajusta esa lista:
+    # - se quitan las tablas intermedias internas (grupos y permisos de un usuario, lecturas de alertas...): se
+    #   borran solas y tienen nombres en inglés que no se pueden traducir ("Relación alerta - user");
+    # - de cada tipo se muestran los primeros MAXIMO_POR_TIPO y una línea con cuántos más hay.
+    #   El total exacto de cada tipo sigue en el "Resumen" de la misma página.
     def get_deleted_objects(self, objs, request):
         a_borrar, conteo, permisos_faltantes, protegidos = super().get_deleted_objects(objs, request)
-        # Relaciones muchos-a-muchos en ambos sentidos: User.groups aparece al borrar un usuario y al borrar un grupo.
-        relaciones = [campo.remote_field for campo in self.model._meta.many_to_many] + [
-            rel for rel in self.model._meta.related_objects if rel.many_to_many
-        ]
-        intermedias = [rel.through._meta for rel in relaciones if rel.through._meta.auto_created]
+        intermedias = [m._meta for m in apps.get_models(include_auto_created=True) if m._meta.auto_created]
         prefijos = tuple(f"{capfirst(meta.verbose_name)}: " for meta in intermedias)
         plurales = {meta.verbose_name_plural for meta in intermedias}
 
-        def filtrar(elementos):
-            resultado = []
+        def recortar(elementos):
+            resultado, vistos, ocultos = [], Counter(), Counter()
+            anterior_visible = True
             for elemento in elementos:
                 if isinstance(elemento, list):
-                    sublista = filtrar(elemento)
+                    # Una sublista detalla al elemento anterior: solo se muestra si ese elemento se mostró.
+                    sublista = recortar(elemento) if anterior_visible else []
                     if sublista:
                         resultado.append(sublista)
-                elif not str(elemento).startswith(prefijos):
+                    continue
+                texto = str(elemento)
+                if texto.startswith(prefijos):
+                    anterior_visible = False
+                    continue
+                tipo = texto.split(':', 1)[0]
+                vistos[tipo] += 1
+                anterior_visible = vistos[tipo] <= MAXIMO_POR_TIPO
+                if anterior_visible:
                     resultado.append(elemento)
+                else:
+                    ocultos[tipo] += 1
+            resultado.extend(f'… y {total:,} más ({tipo})' for tipo, total in ocultos.items())
             return resultado
 
         conteo = {nombre: total for nombre, total in conteo.items() if nombre not in plurales}
-        return filtrar(a_borrar), conteo, permisos_faltantes, protegidos
+        return recortar(a_borrar), conteo, permisos_faltantes, protegidos
 
 
 class CambioContrasenaForm(AdminPasswordChangeForm):
@@ -62,7 +81,7 @@ class CambioContrasenaForm(AdminPasswordChangeForm):
         self.fields['password2'].required = True
 
 
-class UserAdminPersonalizado(OcultarRelacionesInternasMixin, UserAdmin):
+class UserAdminPersonalizado(ConfirmacionDeBorradoMixin, UserAdmin):
     actions = [accion_eliminar('Eliminar usuarios seleccionados')]
     # Mismo motivo que CambioContrasenaForm: al crear un usuario no se ofrece la opción de dejarlo sin contraseña.
     add_form = UserCreationForm
@@ -86,14 +105,14 @@ admin.site.unregister(User)
 admin.site.register(User, UserAdminPersonalizado)
 
 
-class GroupAdminPersonalizado(OcultarRelacionesInternasMixin, GroupAdmin):
+class GroupAdminPersonalizado(ConfirmacionDeBorradoMixin, GroupAdmin):
     actions = [accion_eliminar('Eliminar grupos seleccionados')]
 
 
 admin.site.unregister(Group)
 admin.site.register(Group, GroupAdminPersonalizado)
 
-class EquipoAdmin(admin.ModelAdmin):
+class EquipoAdmin(ConfirmacionDeBorradoMixin, admin.ModelAdmin):
     list_display = ('id', 'nombre', 'ubicacion', 'estado', 'esta_emparejado', 'fecha_registro')
     list_filter = ('estado',)
     readonly_fields = (
@@ -114,7 +133,7 @@ class EquipoAdmin(admin.ModelAdmin):
 
 admin.site.register(Equipo, EquipoAdmin)
 
-class HistorialEstadoAdmin(admin.ModelAdmin):
+class HistorialEstadoAdmin(ConfirmacionDeBorradoMixin, admin.ModelAdmin):
     actions = [accion_eliminar('Eliminar registros del historial seleccionados')]
     list_display = ('id', 'equipo', 'cpu_porcentaje', 'memoria_porcentaje', 'conectado', 'timestamp')
     list_filter = ('equipo', 'equipo__ubicacion', 'conectado')
@@ -127,14 +146,14 @@ class HistorialEstadoAdmin(admin.ModelAdmin):
 
 admin.site.register(HistorialEstado, HistorialEstadoAdmin)
 
-class AlertaAdmin(admin.ModelAdmin):
+class AlertaAdmin(ConfirmacionDeBorradoMixin, admin.ModelAdmin):
     actions = [accion_eliminar('Eliminar alertas seleccionadas')]
     list_display = ('id', 'equipo', 'nivel', 'atendida', 'timestamp')
     list_filter = ('nivel','atendida')
 
 admin.site.register(Alerta, AlertaAdmin)
 
-class ComandoRemotoAdmin(admin.ModelAdmin):
+class ComandoRemotoAdmin(ConfirmacionDeBorradoMixin, admin.ModelAdmin):
     actions = [accion_eliminar('Eliminar comandos seleccionados')]
     list_display = ('id', 'equipo', 'proceso', 'estado', 'creado', 'enviado')
     list_filter = ('estado', 'proceso', 'equipo')

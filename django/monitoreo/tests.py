@@ -945,3 +945,27 @@ class AdminUsuariosSinDesactivarContrasenaTests(TestCase):
         usuario.refresh_from_db()
         self.assertTrue(usuario.check_password('Otra-clave-segura-9'))
 
+
+class ConfirmacionDeBorradoTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser('admin', password='clave-de-prueba-1')
+        self.client.force_login(self.admin)
+
+    def test_al_borrar_un_equipo_la_lista_se_recorta_y_oculta_tablas_internas(self):
+        equipo = Equipo.objects.create(nombre="PC-01")
+        HistorialEstado.objects.bulk_create([
+            HistorialEstado(equipo=equipo, cpu_porcentaje=1, memoria_porcentaje=1, disco_porcentaje=1)
+            for _ in range(12)
+        ])
+        alerta = Alerta.objects.create(equipo=equipo, tipo=Alerta.Tipo.CPU_ALTO, mensaje="CPU alto")
+        alerta.leida_por.add(self.admin)
+
+        respuesta = self.client.get(reverse('admin:monitoreo_equipo_delete', args=[equipo.pk]))
+
+        self.assertContains(respuesta, 'Registro de historial:', count=5)
+        self.assertContains(respuesta, '… y 7 más (Registro de historial)')
+        # El resumen conserva el total real.
+        self.assertContains(respuesta, 'Historial de estados: 12')
+        self.assertContains(respuesta, 'Alerta:')
+        self.assertNotContains(respuesta, 'Relaci')
+
